@@ -1,12 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from "cookie-parser";
-import dotenv from "dotenv";
+import "dotenv/config";
 import helmet from 'helmet';
-dotenv.config();
+import webhookRoutes from './routes/webhook.routes.js';
+import { connectDB } from '../config/database.config.js';
 
 const app = express();
-
+connectDB()
 app.use(express.json());
 app.use(cookieParser());
 
@@ -19,6 +20,8 @@ const corsoptions = {
 };
 app.use(cors(corsoptions));
 app.set('trust proxy', 1);
+
+app.use('/webhooks', webhookRoutes);
 
 app.get('/', (req, res) => {
     return res.json({
@@ -34,7 +37,7 @@ app.use((err, req, res, next) => {
             message: "Bad Request: Malformed JSON"
         });
     }
-    res.status(500).json({
+    res.status(err.statusCode || 500).json({
         success: false,
         message: "An unexpected error occurred on the server."
     });
