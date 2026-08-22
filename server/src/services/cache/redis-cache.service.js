@@ -46,6 +46,27 @@ export class RedisCacheService extends BaseCacheService {
     }
 
     /**
+     * @param {string} key
+     * @param {string} value
+     * @param {number} [ttlSeconds]
+     * @returns {Promise<boolean>} True if set, false if already exists
+     */
+    async setNx(key, value, ttlSeconds) {
+        try {
+            let result;
+            if (ttlSeconds && ttlSeconds > 0) {
+                result = await this.client.set(key, value, 'EX', ttlSeconds, 'NX');
+            } else {
+                result = await this.client.set(key, value, 'NX');
+            }
+            return result === 'OK';
+        } catch (error) {
+            console.warn(`[RedisCacheService] Error setting NX key "${key}":`, error.message);
+            return false;
+        }
+    }
+
+    /**
      * @param {string|string[]} keys
      * @returns {Promise<number>}
      */

@@ -7,6 +7,10 @@ export class BaseCacheService {
         throw new Error(`${this.constructor.name} must implement set()`);
     }
 
+    async setNx(_key, _value, _ttlSeconds) {
+        throw new Error(`${this.constructor.name} must implement setNx()`);
+    }
+
     async del(_key) {
         throw new Error(`${this.constructor.name} must implement del()`);
     }

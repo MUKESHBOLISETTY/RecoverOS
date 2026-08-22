@@ -21,6 +21,21 @@ export const emailWorkerService = new EmailWorkerService();
 export const emailQueue = emailQueueService.getUnderlyingQueue();
 export const emailWorker = emailWorkerService.getUnderlyingWorker();
 
+import { WebhookEventQueue } from '../src/services/queue/webhook-event.queue.js';
+import { WebhookEventWorker } from '../src/services/queue/webhook-event.worker.js';
+import { RedisIdempotencyStore } from '../src/infrastructure/idempotency/redis-idempotency.store.js';
+import { WebhookService } from '../src/services/webhook.service.js';
+import { PaymentWebhookHandler } from '../src/services/webhooks/payment-webhook.handler.js';
+import { prisma } from './database.config.js';
+
+export const webhookService = new WebhookService([
+    new PaymentWebhookHandler()
+]);
+export const idempotencyStore = new RedisIdempotencyStore(cacheService);
+export const webhookEventQueueService = new WebhookEventQueue();
+export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookService);
+
+
 export async function connectRedis() {
     try {
         await redisClient.ping();
@@ -33,6 +48,8 @@ export async function connectRedis() {
 
 export async function disconnectRedis() {
     try {
+        await webhookEventWorkerService.close();
+        await webhookEventQueueService.close();
         await emailWorkerService.close();
         await emailQueueService.close();
         await pubsubService.close();
@@ -66,5 +83,8 @@ export default {
     cache: cacheService,
     pubsub: pubsubService,
     emailQueue: emailQueueService,
-    emailWorker: emailWorkerService
+    emailWorker: emailWorkerService,
+    webhookEventQueue: webhookEventQueueService,
+    webhookEventWorker: webhookEventWorkerService,
+    webhookService: webhookService
 };

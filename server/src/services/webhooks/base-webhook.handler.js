@@ -1,6 +1,6 @@
 export class BaseWebhookHandler {
-    constructor(eventType) {
-        this.eventType = eventType;
+    constructor(eventCategory) {
+        this.eventCategory = eventCategory;
     }
 
     async handle(_webhook) {
