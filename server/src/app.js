@@ -5,9 +5,12 @@ import "dotenv/config";
 import helmet from 'helmet';
 import webhookRoutes from './routes/webhook.routes.js';
 import { connectDB } from '../config/database.config.js';
+import { connectRedis } from '../config/redis.config.js';
 
 const app = express();
-connectDB()
+connectDB();
+connectRedis();
+
 app.use(express.json());
 app.use(cookieParser());
 
