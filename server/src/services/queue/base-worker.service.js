@@ -27,9 +27,9 @@ export class BaseWorkerService {
         this._setupWorkerEvents();
     }
 
-    async start() {
+    start() {
         console.log(`[Worker:${this.queueName}] Starting worker...`);
-        return await this.worker.run();
+        this.worker.run().catch(err => console.error(`[Worker:${this.queueName}] run error:`, err));
     }
 
     async handleJob(job) {
