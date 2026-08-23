@@ -28,6 +28,11 @@ import { WebhookService } from '../src/services/webhook.service.js';
 import { PaymentWebhookHandler } from '../src/services/webhooks/payment-webhook.handler.js';
 import { prisma } from './database.config.js';
 import { PaymentDowntimeWebhookHandler } from '../src/services/webhooks/payment-downtime-webhook.handler.js';
+import { RazorpayPaymentRepository } from '../src/infrastructure/razorpay/razorpay-payment.repository.js';
+import { ReconciliationService } from '../src/domain/payment/reconciliation.service.js';
+import { ReconciliationQueue } from '../src/services/queue/reconciliation-queue.js';
+import { ReconciliationWorker } from '../src/services/queue/reconciliation-worker.js';
+import { ReconciliationJob } from '../src/infrastructure/jobs/reconciliation.job.js';
 
 export const webhookService = new WebhookService([
     new PaymentWebhookHandler(),
@@ -36,6 +41,28 @@ export const webhookService = new WebhookService([
 export const idempotencyStore = new RedisIdempotencyStore(cacheService);
 export const webhookEventQueueService = new WebhookEventQueue();
 export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookService);
+
+function createReconciliationInfra() {
+    try {
+        const razorpayRepo = new RazorpayPaymentRepository();
+        const reconciliationSvc = new ReconciliationService(prisma, razorpayRepo, cacheService);
+        const reconciliationQueue = new ReconciliationQueue();
+        const reconciliationWorker = new ReconciliationWorker(reconciliationSvc);
+        const reconciliationJob = new ReconciliationJob(reconciliationQueue);
+        return { reconciliationQueue, reconciliationWorker, reconciliationJob };
+    } catch (err) {
+        console.warn(
+            `[ReconciliationInfra] Could not initialise reconciliation: ${err.message}. ` +
+            'Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable it.'
+        );
+        return null;
+    }
+}
+
+const _reconciliation = createReconciliationInfra();
+export const reconciliationQueue = _reconciliation?.reconciliationQueue ?? null;
+export const reconciliationWorker = _reconciliation?.reconciliationWorker ?? null;
+export const reconciliationJob = _reconciliation?.reconciliationJob ?? null;
 
 
 export async function connectRedis() {
@@ -56,6 +83,15 @@ export async function connectRedis() {
         if (process.env.START_WORKERS === 'true' || process.env.NODE_ENV === 'development') {
             await emailWorkerService.start();
             await webhookEventWorkerService.start();
+
+            if (reconciliationWorker && reconciliationJob) {
+                reconciliationWorker.start();
+                reconciliationJob.start().catch(err =>
+                    console.error('Failed to start reconciliation job:', err)
+                );
+                console.log('Reconciliation worker started and nightly job scheduled.');
+            }
+
             console.log('Background queue workers initialized and listening for jobs.');
         } else {
             console.log('Workers are NOT started (START_WORKERS is false). API is running in web-only mode.');
@@ -67,6 +103,10 @@ export async function connectRedis() {
 
 export async function disconnectRedis() {
     try {
+        if (reconciliationJob) await reconciliationJob.stop();
+        if (reconciliationWorker) await reconciliationWorker.close();
+        if (reconciliationQueue) await reconciliationQueue.close();
+
         await webhookEventWorkerService.close();
         await webhookEventQueueService.close();
         await emailWorkerService.close();
@@ -105,5 +145,8 @@ export default {
     emailWorker: emailWorkerService,
     webhookEventQueue: webhookEventQueueService,
     webhookEventWorker: webhookEventWorkerService,
-    webhookService: webhookService
+    webhookService: webhookService,
+    reconciliationQueue,
+    reconciliationWorker,
+    reconciliationJob,
 };

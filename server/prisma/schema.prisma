@@ -44,6 +44,12 @@ model Payment {
   acquirerData      Json?
   notes             Json?
   paymentCreatedAt  DateTime @db.Timestamptz(3)
+  customerId        String?
+  captured          Boolean?
+  description       String?
+  international     Boolean?
+  tokenId           String?
+  offerId           String?
 
   createdAt         DateTime @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @db.Timestamptz(3)
@@ -52,6 +58,8 @@ model Payment {
   recoveryCases     RecoveryCase[]
 
   @@index([razorpayPaymentId])
+  @@index([customerId])
+  @@index([contact, status])
   @@index([method])
   @@index([errorSource])
   @@index([errorReason])
