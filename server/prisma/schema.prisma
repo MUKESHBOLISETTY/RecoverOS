@@ -8,7 +8,7 @@ datasource db {
   extensions = [vector]
 }
 
-model IncomingEvent {
+model WebhookEvent {
   id             String   @id @default(uuid())
   source         String
   idempotencyKey String
@@ -21,4 +21,203 @@ model IncomingEvent {
   updatedAt      DateTime @updatedAt
 
   @@unique([source, idempotencyKey])
+}
+
+model Payment {
+  id                String   @id @default(uuid()) @db.Uuid
+  razorpayPaymentId String   @unique
+  amount            BigInt
+  currency          String
+  status            String
+  method            String
+  orderId           String?
+  invoiceId         String?
+  bank              String?
+  vpa               String?
+  email             String?
+  contact           String?
+  errorCode         String?
+  errorDescription  String?
+  errorSource       String?
+  errorStep         String?
+  errorReason       String?
+  acquirerData      Json?
+  notes             Json?
+  paymentCreatedAt  DateTime @db.Timestamptz(3)
+
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  correlations      PaymentFailureCorrelation[]
+  recoveryCases     RecoveryCase[]
+
+  @@index([razorpayPaymentId])
+  @@index([method])
+  @@index([errorSource])
+  @@index([errorReason])
+}
+
+enum PaymentDowntimeStatus {
+  SCHEDULED
+  STARTED
+  UPDATED
+  RESOLVED
+}
+
+model PaymentDowntime {
+  id               String   @id @default(uuid()) @db.Uuid
+  razorpayId       String   @unique
+  entity           String   @default("payment.downtime")
+  method           String
+  begin            DateTime @db.Timestamptz(3)
+  end              DateTime? @db.Timestamptz(3)
+  status           PaymentDowntimeStatus
+  scheduled        Boolean
+  severity         String?
+  instrument       Json?
+  instrumentSchema Json?
+  createdAt        DateTime @db.Timestamptz(3)
+  updatedAt        DateTime @db.Timestamptz(3)
+  rawPayload       Json?
+  
+  correlations     PaymentFailureCorrelation[]
+
+  @@index([method])
+  @@index([status])
+  @@index([begin])
+  @@index([end])
+  @@index([method, status])
+}
+
+enum PaymentFailureCorrelationStatus {
+  CANDIDATE
+  MATCHED
+  REJECTED
+  SUPERSEDED
+}
+
+enum PaymentFailureCorrelationConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum PaymentFailureCorrelationMatchType {
+  TIME_OVERLAP
+  METHOD_MATCH
+  BANK_MATCH
+  ISSUER_MATCH
+  NETWORK_MATCH
+  PSP_MATCH
+  VPA_MATCH
+  MULTI_SIGNAL
+}
+
+model PaymentFailureCorrelation {
+  id              String   @id @default(uuid()) @db.Uuid
+  paymentId       String   @db.Uuid
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  downtimeId      String   @db.Uuid
+  downtime        PaymentDowntime @relation(fields: [downtimeId], references: [id], onDelete: Cascade)
+  
+  status          PaymentFailureCorrelationStatus @default(CANDIDATE)
+  confidence      PaymentFailureCorrelationConfidence
+  
+  explanation     String?  @db.Text
+  score           Decimal? @db.Decimal(5, 4)
+  matchedSignals  Json?
+  
+  paymentContext  Json?
+  downtimeContext Json?
+  
+  correlatedAt    DateTime @default(now()) @db.Timestamptz(3)
+  evaluatedAt     DateTime @default(now()) @db.Timestamptz(3)
+  
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  recoveryCases   RecoveryCase[]
+
+  @@unique([paymentId, downtimeId])
+  @@index([paymentId])
+  @@index([downtimeId])
+  @@index([status])
+  @@index([confidence])
+  @@index([correlatedAt])
+}
+
+// Recovery Models
+enum RecoveryCaseStatus {
+  OPEN
+  WAITING
+  RECOVERED
+  STOPPED
+  FAILED
+}
+
+model RecoveryCase {
+  id            String   @id @default(uuid()) @db.Uuid
+  paymentId     String   @db.Uuid
+  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  correlationId String?  @db.Uuid
+  correlation   PaymentFailureCorrelation? @relation(fields: [correlationId], references: [id], onDelete: SetNull)
+  
+  status        RecoveryCaseStatus @default(OPEN)
+  
+  // Snapshots for context
+  paymentSnapshot Json?
+  strategyApplied String?
+  
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+  
+  actions       RecoveryAction[]
+  outcome       Outcome?
+}
+
+enum RecoveryActionType {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+model RecoveryAction {
+  id             String   @id @default(uuid()) @db.Uuid
+  recoveryCaseId String   @db.Uuid
+  recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  
+  type           RecoveryActionType
+  status         String
+  payload        Json?
+  
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model Outcome {
+  id             String   @id @default(uuid()) @db.Uuid
+  recoveryCaseId String   @unique @db.Uuid
+  recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  
+  successful     Boolean
+  amountRecovered BigInt?
+  notes          String?  @db.Text
+  
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  entityId    String   @db.Uuid
+  entityType  String
+  action      String
+  oldValue    Json?
+  newValue    Json?
+  actor       String?
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  
+  @@index([entityType, entityId])
 }
