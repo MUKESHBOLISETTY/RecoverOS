@@ -16,4 +16,6 @@ const webhookController = new WebhookController(idempotencyStore, webhookEventQu
 
 router.post("/payment", limiter, validateWebhook, webhookController.ingestEvent);
 
+router.post("/payment_downtime", limiter, validateWebhook, webhookController.ingestEvent);
+
 export default router;

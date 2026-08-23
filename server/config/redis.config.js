@@ -27,9 +27,11 @@ import { RedisIdempotencyStore } from '../src/infrastructure/idempotency/redis-i
 import { WebhookService } from '../src/services/webhook.service.js';
 import { PaymentWebhookHandler } from '../src/services/webhooks/payment-webhook.handler.js';
 import { prisma } from './database.config.js';
+import { PaymentDowntimeWebhookHandler } from '../src/services/webhooks/payment-downtime-webhook.handler.js';
 
 export const webhookService = new WebhookService([
-    new PaymentWebhookHandler()
+    new PaymentWebhookHandler(),
+    new PaymentDowntimeWebhookHandler()
 ]);
 export const idempotencyStore = new RedisIdempotencyStore(cacheService);
 export const webhookEventQueueService = new WebhookEventQueue();
@@ -38,9 +40,19 @@ export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookS
 
 export async function connectRedis() {
     try {
-        await redisClient.ping();
+        if (redisClient.status !== 'ready') {
+            await new Promise((resolve) => {
+                redisClient.once('ready', resolve);
+                redisClient.once('error', resolve);
+                setTimeout(resolve, 3000);
+            });
+        }
         console.log('Successfully connected and authenticated to Redis!');
+    } catch (error) {
+        console.warn(`Failed to ping Redis on startup (${error.message}).`);
+    }
 
+    try {
         if (process.env.START_WORKERS === 'true' || process.env.NODE_ENV === 'development') {
             await emailWorkerService.start();
             await webhookEventWorkerService.start();
@@ -49,7 +61,7 @@ export async function connectRedis() {
             console.log('Workers are NOT started (START_WORKERS is false). API is running in web-only mode.');
         }
     } catch (error) {
-        console.warn(`Failed to connect to Redis on startup (${error.message}). Continuing with graceful cache fallback...`);
+        console.warn(`Failed to start workers: ${error.message}`);
     }
 }
 
