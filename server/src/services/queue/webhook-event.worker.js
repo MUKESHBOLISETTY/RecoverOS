@@ -20,7 +20,7 @@ export class WebhookEventWorker extends BaseWorkerService {
 
         try {
             await this.prisma.$transaction(async (tx) => {
-                let eventRecord = await tx.incomingEvent.findUnique({
+                let eventRecord = await tx.webhookEvent.findUnique({
                     where: { source_idempotencyKey: { source, idempotencyKey } }
                 });
 
@@ -29,12 +29,12 @@ export class WebhookEventWorker extends BaseWorkerService {
                         console.log(`[WebhookEventWorker] Event ${source}:${idempotencyKey} is already COMPLETED in DB. Skipping processing.`);
                         return;
                     }
-                    eventRecord = await tx.incomingEvent.update({
+                    eventRecord = await tx.webhookEvent.update({
                         where: { id: eventRecord.id },
                         data: { status: 'PENDING', errorReason: null }
                     });
                 } else {
-                    eventRecord = await tx.incomingEvent.create({
+                    eventRecord = await tx.webhookEvent.create({
                         data: {
                             source,
                             idempotencyKey,
@@ -52,7 +52,7 @@ export class WebhookEventWorker extends BaseWorkerService {
 
                 await handler.handle({ body: payload, eventType, _tx: tx });
 
-                await tx.incomingEvent.update({
+                await tx.webhookEvent.update({
                     where: { id: eventRecord.id },
                     data: { status: 'COMPLETED' }
                 });
@@ -65,7 +65,7 @@ export class WebhookEventWorker extends BaseWorkerService {
             console.error(`[WebhookEventWorker] Failed to process job ${job.id}:`, error);
 
             try {
-                await this.prisma.incomingEvent.update({
+                await this.prisma.webhookEvent.update({
                     where: { source_idempotencyKey: { source, idempotencyKey } },
                     data: {
                         status: 'FAILED',
