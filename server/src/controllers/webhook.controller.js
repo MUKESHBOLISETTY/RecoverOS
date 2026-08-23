@@ -11,14 +11,19 @@ export class WebhookController {
     ingestEvent = async (req, res, next) => {
         try {
             let source, idempotencyKey, eventType, eventCategory;
-
+            console.log(req.body)
             if (req.headers['x-razorpay-event-id']) {
                 source = 'RAZORPAY';
                 idempotencyKey = req.headers['x-razorpay-event-id'];
                 eventType = req.body?.event || 'unknown';
-                eventCategory = eventType.split('.')[0] || 'unknown';
-            }
-            else if (req.body && req.body.id && req.body.object === 'event') {
+                const parts = eventType.split('.');
+                if (parts.length > 1) {
+                    parts.pop();
+                    eventCategory = parts.join('_');
+                } else {
+                    eventCategory = eventType;
+                }
+            } else if (req.body && req.body.id && req.body.object === 'event') {
                 source = req.body.source || 'unknown';
                 idempotencyKey = req.body.id;
                 eventType = req.body.type || 'unknown';
