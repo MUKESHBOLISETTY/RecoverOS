@@ -19,11 +19,17 @@ export class BaseWorkerService {
                 connection,
                 limiter,
                 concurrency,
+                autorun: false,
                 ...workerOptions
             }
         );
 
         this._setupWorkerEvents();
+    }
+
+    async start() {
+        console.log(`[Worker:${this.queueName}] Starting worker...`);
+        return await this.worker.run();
     }
 
     async handleJob(job) {

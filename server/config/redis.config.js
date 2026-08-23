@@ -40,7 +40,14 @@ export async function connectRedis() {
     try {
         await redisClient.ping();
         console.log('Successfully connected and authenticated to Redis!');
-        console.log('Background queue workers initialized and listening for jobs.');
+
+        if (process.env.START_WORKERS === 'true' || process.env.NODE_ENV === 'development') {
+            await emailWorkerService.start();
+            await webhookEventWorkerService.start();
+            console.log('Background queue workers initialized and listening for jobs.');
+        } else {
+            console.log('Workers are NOT started (START_WORKERS is false). API is running in web-only mode.');
+        }
     } catch (error) {
         console.warn(`Failed to connect to Redis on startup (${error.message}). Continuing with graceful cache fallback...`);
     }
