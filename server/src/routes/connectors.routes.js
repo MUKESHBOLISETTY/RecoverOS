@@ -1,0 +1,23 @@
+import express from 'express';
+import { authenticateUser } from '../middlewares/auth.middleware.js';
+
+/**
+ * @param {import('../controllers/connectors.controller.js').default} connectorsController 
+ */
+function createConnectorsRouter(connectorsController) {
+  const router = express.Router();
+
+  router.use(authenticateUser);
+
+  router.get('/available', connectorsController.getAvailableConnectors);
+
+  router.get('/', connectorsController.getUserConnections);
+
+  router.post('/', connectorsController.saveConnection);
+
+  router.delete('/:id', connectorsController.deleteConnection);
+
+  return router;
+}
+
+export default createConnectorsRouter;

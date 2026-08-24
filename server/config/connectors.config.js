@@ -1,0 +1,21 @@
+import { prisma } from './database.config.js';
+import PrismaConnectorCredentialRepository from '../src/infrastructure/db/connectors/prisma-connector-credential.repository.js';
+import CredentialEncryptionService from '../src/domain/connectors/credential-encryption.service.js';
+import ConnectorFactory from '../src/infrastructure/connectors/connector.factory.js';
+import ConnectorManager from '../src/domain/connectors/connector.manager.js';
+import ConnectorsController from '../src/controllers/connectors.controller.js';
+import createConnectorsRouter from '../src/routes/connectors.routes.js';
+
+const credentialRepo = new PrismaConnectorCredentialRepository(prisma);
+const encryptionService = new CredentialEncryptionService(process.env.ENCRYPTION_KEY);
+const connectorFactory = new ConnectorFactory();
+const connectorManager = new ConnectorManager({
+    connectorFactory,
+    encryptionService,
+    credentialRepository: credentialRepo
+});
+
+const connectorsController = new ConnectorsController(connectorManager);
+const connectorsRouter = createConnectorsRouter(connectorsController);
+
+export { connectorsRouter, connectorManager, connectorsController };

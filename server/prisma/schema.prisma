@@ -235,12 +235,12 @@ model User {
   email          String   @unique
   password       String
   emailVerified  Boolean  @default(true)
-  connections    Json?    @default("[]")
   
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
   
-  deviceSessions DeviceSession[]
+  deviceSessions        DeviceSession[]
+  connectorCredentials  ConnectorCredential[]
 
   @@index([email])
 }
@@ -257,5 +257,31 @@ model DeviceSession {
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([userId])
+}
+
+enum ConnectorCategory {
+  DATA_SOURCE
+  COMMUNICATION_SOURCE
+}
+
+model ConnectorCredential {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  connectorId String
+  category    ConnectorCategory
+  name        String            // User-friendly name, e.g., "My Prod Razorpay"
+  
+  encryptedData String          // Encrypted JSON string of credentials (API keys, secrets)
+  iv          String            // Initialization Vector used for encryption
+  authTag     String            // Authentication tag for GCM
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  
+  @@unique([userId, connectorId, name])
+  @@index([userId])
+  @@index([category])
 }
 

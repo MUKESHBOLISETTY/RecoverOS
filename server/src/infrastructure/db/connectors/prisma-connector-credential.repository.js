@@ -1,0 +1,46 @@
+import ConnectorCredentialRepository from '../../../domain/connectors/connector-credential.repository.js';
+
+class PrismaConnectorCredentialRepository extends ConnectorCredentialRepository {
+  /**
+   * @param {import('@prisma/client').PrismaClient} prisma 
+   */
+  constructor(prisma) {
+    super();
+    this.prisma = prisma;
+  }
+
+  async findByUserAndConnector(userId, connectorId) {
+    return this.prisma.connectorCredential.findFirst({
+      where: { userId, connectorId }
+    });
+  }
+
+  async create(data) {
+    return this.prisma.connectorCredential.create({
+      data: {
+        userId: data.userId,
+        connectorId: data.connectorId,
+        category: data.category,
+        name: data.name,
+        encryptedData: data.encryptedData,
+        iv: data.iv,
+        authTag: data.authTag
+      }
+    });
+  }
+
+  async listByUser(userId) {
+    return this.prisma.connectorCredential.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async delete(id, userId) {
+    return this.prisma.connectorCredential.deleteMany({
+      where: { id, userId }
+    });
+  }
+}
+
+export default PrismaConnectorCredentialRepository;

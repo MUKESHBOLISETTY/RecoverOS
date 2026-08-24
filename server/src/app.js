@@ -3,10 +3,13 @@ import cors from 'cors';
 import cookieParser from "cookie-parser";
 import "dotenv/config";
 import helmet from 'helmet';
-import webhookRoutes from './routes/webhook.routes.js';
-import authRoutes from './routes/auth.routes.js';
+import createWebhookRouter from './routes/webhook.routes.js';
+import createAuthRouter from './routes/auth.routes.js';
+import { connectorsRouter } from '../config/connectors.config.js';
 import { connectDB } from '../config/database.config.js';
-import { connectRedis } from '../config/redis.config.js';
+import { connectRedis, idempotencyStore, webhookEventQueueService } from '../config/redis.config.js';
+import { WebhookController } from './controllers/webhook.controller.js';
+import { AuthController } from './controllers/auth.controller.js';
 
 const app = express();
 connectDB();
@@ -25,8 +28,13 @@ const corsoptions = {
 app.use(cors(corsoptions));
 app.set('trust proxy', 1);
 
+const webhookController = new WebhookController(idempotencyStore, webhookEventQueueService);
+const webhookRoutes = createWebhookRouter(webhookController);
+const authRoutes = createAuthRouter(AuthController);
+
 app.use('/webhooks', webhookRoutes);
 app.use('/auth', authRoutes);
+app.use('/connectors', connectorsRouter);
 
 app.get('/', (req, res) => {
     return res.json({

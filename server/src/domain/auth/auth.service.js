@@ -25,8 +25,7 @@ export class AuthService {
         const user = await this.userRepository.create({
             email,
             password: hashedPassword,
-            emailVerified: true,
-            connections: []
+            emailVerified: true
         });
 
         return this._createSession(user, deviceName, ipAddress);
@@ -88,8 +87,7 @@ export class AuthService {
             user: {
                 id: user.id,
                 email: user.email,
-                emailVerified: user.emailVerified,
-                connections: user.connections
+                emailVerified: user.emailVerified
             },
             token
         };

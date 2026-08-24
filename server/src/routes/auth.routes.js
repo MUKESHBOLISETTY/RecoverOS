@@ -1,11 +1,17 @@
-import { Router } from 'express';
-import { AuthController } from '../controllers/auth.controller.js';
+import express from 'express';
 import { authenticateUser } from '../middlewares/auth.middleware.js';
 
-const router = Router();
+/**
+ * @param {import('../controllers/auth.controller.js').AuthController} authController 
+ */
+function createAuthRouter(authController) {
+  const router = express.Router();
 
-router.post('/register', AuthController.register);
-router.post('/login', AuthController.login);
-router.post('/logout', authenticateUser, AuthController.logout);
+  router.post('/register', authController.register);
+  router.post('/login', authController.login);
+  router.post('/logout', authenticateUser, authController.logout);
 
-export default router;
+  return router;
+}
+
+export default createAuthRouter;
