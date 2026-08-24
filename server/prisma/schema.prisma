@@ -303,6 +303,7 @@ model ConnectorCredential {
 
   payments             Payment[]
   paymentDowntimes     PaymentDowntime[]
+  agents               AgentConnector[]
 
   @@unique([userId, connectorId, name])
   @@index([userId])
@@ -338,7 +339,7 @@ model Agent {
 
   stopConditions String[]
 
-  connectionIds String[]
+  connections AgentConnector[]
 
   spec Json
 
@@ -349,4 +350,18 @@ model Agent {
   @@index([userId])
   @@index([status])
   @@index([userId, status])
+}
+
+model AgentConnector {
+  agentId     String              @db.Uuid
+  agent       Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  
+  connectorId String              @db.Uuid
+  connector   ConnectorCredential @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+
+  connectedAt DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@id([agentId, connectorId])
+  @@index([agentId])
+  @@index([connectorId])
 }

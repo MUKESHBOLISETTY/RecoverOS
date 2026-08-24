@@ -7,8 +7,8 @@ export class RazorpayPaymentRepository {
      * @param {string} [credentials.keySecret]
      */
     constructor(credentials = {}) {
-        const keyId = credentials.keyId || process.env.RAZORPAY_KEY_ID;
-        const keySecret = credentials.keySecret || process.env.RAZORPAY_KEY_SECRET;
+        const keyId = credentials.keyId;
+        const keySecret = credentials.keySecret;
 
         if (!keyId || !keySecret) {
             throw new Error(
