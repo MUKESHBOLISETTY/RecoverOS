@@ -20,7 +20,7 @@ class ConnectorsController {
 
   getUserConnections = async (req, res) => {
     try {
-      const userId = req.user.userId;
+      const userId = req.user.id;
       const connections = await this.connectorManager.getUserConnections(userId);
       res.json({ success: true, data: connections });
     } catch (error) {
@@ -31,7 +31,7 @@ class ConnectorsController {
 
   saveConnection = async (req, res) => {
     try {
-      const userId = req.user.userId;
+      const userId = req.user.id;
       const parsed = saveConnectionSchema.parse(req.body);
 
       const connection = await this.connectorManager.saveConnection(
@@ -53,7 +53,7 @@ class ConnectorsController {
 
   deleteConnection = async (req, res) => {
     try {
-      const userId = req.user.userId;
+      const userId = req.user.id;
       const connectionId = req.params.id;
 
       await this.connectorManager.removeConnection(connectionId, userId);

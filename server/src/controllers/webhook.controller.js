@@ -1,16 +1,21 @@
+import Razorpay from 'razorpay';
+
 export class WebhookController {
     /**
      * @param {import('../infrastructure/idempotency/redis-idempotency.store.js').RedisIdempotencyStore} idempotencyStore 
      * @param {import('../services/queue/webhook-event.queue.js').WebhookEventQueue} webhookQueue 
+     * @param {import('../domain/connectors/connector.manager.js').default} connectorManager
      */
-    constructor(idempotencyStore, webhookQueue) {
+    constructor(idempotencyStore, webhookQueue, connectorManager) {
         this.idempotencyStore = idempotencyStore;
         this.webhookQueue = webhookQueue;
+        this.connectorManager = connectorManager;
     }
 
     ingestEvent = async (req, res, next) => {
         try {
             let source, idempotencyKey, eventType, eventCategory;
+
             if (req.headers['x-razorpay-event-id']) {
                 source = 'RAZORPAY';
                 idempotencyKey = req.headers['x-razorpay-event-id'];
@@ -29,6 +34,28 @@ export class WebhookController {
                 eventCategory = eventType.split('.')[0] || 'unknown';
             } else {
                 return res.status(400).json({ success: false, message: 'Unrecognized webhook format' });
+            }
+
+            if (source === 'RAZORPAY') {
+                const razorpaySignature = req.headers['x-razorpay-signature'];
+                if (!razorpaySignature) {
+                    return res.status(400).json({ success: false, message: 'Missing Razorpay signature' });
+                }
+                if (!this.connectorManager) {
+                    return res.status(500).json({ success: false, message: 'Connector manager not initialized' });
+                }
+                const credentials = await this.connectorManager.getGlobalDecryptedCredentials('razorpay');
+                if (!credentials || !credentials.keySecret) {
+                    return res.status(500).json({ success: false, message: 'Razorpay credentials not found' });
+                }
+
+                try {
+                    const rawBody = req.rawBody ? req.rawBody.toString() : JSON.stringify(req.body);
+                    Razorpay.validateWebhookSignature(rawBody, razorpaySignature, credentials.keySecret);
+                } catch (err) {
+                    console.error('[WebhookController] Razorpay signature validation failed:', err.message);
+                    return res.status(400).json({ success: false, message: 'Invalid Razorpay signature' });
+                }
             }
 
             const LOCK_TTL_SECONDS = 24 * 60 * 60;

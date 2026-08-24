@@ -5,7 +5,7 @@ import "dotenv/config";
 import helmet from 'helmet';
 import createWebhookRouter from './routes/webhook.routes.js';
 import createAuthRouter from './routes/auth.routes.js';
-import { connectorsRouter } from '../config/connectors.config.js';
+import { connectorsRouter, connectorManager } from '../config/connectors.config.js';
 import { connectDB } from '../config/database.config.js';
 import { connectRedis, idempotencyStore, webhookEventQueueService } from '../config/redis.config.js';
 import { WebhookController } from './controllers/webhook.controller.js';
@@ -28,7 +28,7 @@ const corsoptions = {
 app.use(cors(corsoptions));
 app.set('trust proxy', 1);
 
-const webhookController = new WebhookController(idempotencyStore, webhookEventQueueService);
+const webhookController = new WebhookController(idempotencyStore, webhookEventQueueService, connectorManager);
 const webhookRoutes = createWebhookRouter(webhookController);
 const authRoutes = createAuthRouter(AuthController);
 

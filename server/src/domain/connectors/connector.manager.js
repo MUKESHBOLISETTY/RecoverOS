@@ -66,6 +66,15 @@ class ConnectorManager {
   getAvailableConnectors() {
     return this.connectorFactory.getAllConnectorsMetadata();
   }
+
+  /**
+   * @param {string} connectorId
+   */
+  async getGlobalDecryptedCredentials(connectorId) {
+    const record = await this.credentialRepository.findFirstByConnectorId(connectorId);
+    if (!record) return null;
+    return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
+  }
 }
 
 export default ConnectorManager;
