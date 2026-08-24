@@ -26,6 +26,13 @@ model WebhookEvent {
 model Payment {
   id                String   @id @default(uuid()) @db.Uuid
   razorpayPaymentId String   @unique
+
+  userId            String?  @db.Uuid
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  connectionId      String?  @db.Uuid
+  connection        ConnectorCredential? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
   amount            BigInt
   currency          String
   status            String
@@ -57,6 +64,8 @@ model Payment {
   correlations  PaymentFailureCorrelation[]
   recoveryCases RecoveryCase[]
 
+  @@index([userId])
+  @@index([connectionId])
   @@index([razorpayPaymentId])
   @@index([customerId])
   @@index([contact, status])
@@ -76,6 +85,13 @@ model PaymentDowntime {
   id               String                @id @default(uuid()) @db.Uuid
   razorpayId       String                @unique
   entity           String                @default("payment.downtime")
+
+  userId           String?               @db.Uuid
+  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  connectionId     String?               @db.Uuid
+  connection       ConnectorCredential?  @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
   method           String
   begin            DateTime              @db.Timestamptz(3)
   end              DateTime?             @db.Timestamptz(3)
@@ -90,6 +106,8 @@ model PaymentDowntime {
 
   correlations PaymentFailureCorrelation[]
 
+  @@index([userId])
+  @@index([connectionId])
   @@index([method])
   @@index([status])
   @@index([begin])
@@ -225,36 +243,39 @@ model AuditEvent {
   newValue   Json?
   actor      String?
 
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
   @@index([entityType, entityId])
 }
 
 model User {
-  id             String   @id @default(uuid()) @db.Uuid
-  email          String   @unique
-  password       String
-  emailVerified  Boolean  @default(true)
-  
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
-  
-  deviceSessions        DeviceSession[]
-  connectorCredentials  ConnectorCredential[]
+  id            String  @id @default(uuid()) @db.Uuid
+  email         String  @unique
+  password      String
+  emailVerified Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  deviceSessions       DeviceSession[]
+  connectorCredentials ConnectorCredential[]
+  agents               Agent[]
+  payments             Payment[]
+  paymentDowntimes     PaymentDowntime[]
 
   @@index([email])
 }
 
 model DeviceSession {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @db.Uuid
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceName  String   @default("Unknown Device")
-  ipAddress   String?
-  expiresAt   DateTime @db.Timestamptz(3)
-  
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName String   @default("Unknown Device")
+  ipAddress  String?
+  expiresAt  DateTime @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([userId])
 }
@@ -265,23 +286,67 @@ enum ConnectorCategory {
 }
 
 model ConnectorCredential {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @db.Uuid
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   connectorId String
   category    ConnectorCategory
-  name        String            // User-friendly name, e.g., "My Prod Razorpay"
-  
-  encryptedData String          // Encrypted JSON string of credentials (API keys, secrets)
-  iv          String            // Initialization Vector used for encryption
-  authTag     String            // Authentication tag for GCM
-  
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
-  
+  name        String
+
+  encryptedData String
+  iv            String
+  authTag       String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  payments             Payment[]
+  paymentDowntimes     PaymentDowntime[]
+
   @@unique([userId, connectorId, name])
   @@index([userId])
   @@index([category])
 }
 
+enum AgentStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+  ARCHIVED
+}
+
+model Agent {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  version     Int         @default(1)
+  description String?
+  status      AgentStatus @default(ACTIVE)
+
+  purpose String @db.Text
+
+  triggers String[]
+
+  requiredCapabilities String[]
+
+  rules Json
+
+  actions String[]
+
+  stopConditions String[]
+
+  connectionIds String[]
+
+  spec Json
+
+  installedAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+}

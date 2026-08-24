@@ -9,7 +9,18 @@ export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
     }
 
     async handle(webhook) {
-        const { body, eventType, _tx: prisma } = webhook;
+        const { connectionId, body, eventType, _tx: prisma } = webhook;
+
+        let userId = null;
+        if (connectionId) {
+            const connection = await prisma.connectorCredential.findUnique({
+                where: { id: connectionId },
+                select: { userId: true }
+            });
+            if (connection) {
+                userId = connection.userId;
+            }
+        }
 
         const correlationEngine = new CorrelationEngine(prisma, cacheService);
         const recoveryManager = new RecoveryManager(prisma);
@@ -29,7 +40,9 @@ export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
                 status: statusEnum,
                 end: downtimeData.end ? new Date(downtimeData.end * 1000) : null,
                 updatedAt: new Date(downtimeData.updated_at * 1000),
-                rawPayload: downtimeData
+                rawPayload: downtimeData,
+                userId,
+                connectionId
             },
             create: {
                 razorpayId: downtimeData.id,
@@ -43,7 +56,9 @@ export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
                 instrumentSchema: downtimeData.instrument_schema || [],
                 createdAt: new Date(downtimeData.created_at * 1000),
                 updatedAt: new Date(downtimeData.updated_at * 1000),
-                rawPayload: downtimeData
+                rawPayload: downtimeData,
+                userId,
+                connectionId
             }
         });
 

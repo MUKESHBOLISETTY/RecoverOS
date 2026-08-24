@@ -14,6 +14,7 @@ export class WebhookController {
 
     ingestEvent = async (req, res, next) => {
         try {
+            const connectionId = req.params.connectionId;
             let source, idempotencyKey, eventType, eventCategory;
 
             if (req.headers['x-razorpay-event-id']) {
@@ -44,7 +45,7 @@ export class WebhookController {
                 if (!this.connectorManager) {
                     return res.status(500).json({ success: false, message: 'Connector manager not initialized' });
                 }
-                const credentials = await this.connectorManager.getGlobalDecryptedCredentials('razorpay');
+                const credentials = await this.connectorManager.getDecryptedCredentialsById(connectionId);
                 if (!credentials || !credentials.keySecret) {
                     return res.status(500).json({ success: false, message: 'Razorpay credentials not found' });
                 }
@@ -66,9 +67,9 @@ export class WebhookController {
                 return res.status(200).send('OK');
             }
 
-            await this.webhookQueue.addEvent(source, idempotencyKey, eventType, eventCategory, req.body);
+            await this.webhookQueue.addEvent(connectionId, source, idempotencyKey, eventType, eventCategory, req.body);
 
-            console.log(`[WebhookController] Queued new event ${source}:${idempotencyKey}. Acknowledging.`);
+            console.log(`[WebhookController] Queued new event ${source}:${idempotencyKey} for connection ${connectionId}. Acknowledging.`);
             return res.status(200).send('OK');
         } catch (error) {
             console.error('[WebhookController] Error ingesting webhook:', error);

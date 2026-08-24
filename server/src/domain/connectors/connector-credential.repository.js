@@ -8,6 +8,13 @@ class ConnectorCredentialRepository {
   }
 
   /**
+   * @param {string} id
+   */
+  async findById(id) {
+    throw new Error('Method not implemented.');
+  }
+
+  /**
    * @param {string} connectorId 
    */
   async findFirstByConnectorId(connectorId) {

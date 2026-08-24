@@ -13,7 +13,18 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
      * @param {{ body: object, eventType: string, _tx: import('@prisma/client').PrismaClient }} webhook
      */
     async handle(webhook) {
-        const { body, eventType, _tx: prisma } = webhook;
+        const { connectionId, body, eventType, _tx: prisma } = webhook;
+
+        let userId = null;
+        if (connectionId) {
+            const connection = await prisma.connectorCredential.findUnique({
+                where: { id: connectionId },
+                select: { userId: true }
+            });
+            if (connection) {
+                userId = connection.userId;
+            }
+        }
 
         const correlationEngine = new CorrelationEngine(prisma, cacheService);
         const recoveryManager = new RecoveryManager(prisma);
@@ -29,8 +40,16 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
 
         const payment = await prisma.payment.upsert({
             where: { razorpayPaymentId: entity.id },
-            create: createData,
-            update: updateData,
+            create: {
+                ...createData,
+                userId,
+                connectionId
+            },
+            update: {
+                ...updateData,
+                userId,
+                connectionId
+            },
         });
 
         console.log(
@@ -42,7 +61,7 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
             await correlationEngine.correlatePaymentFailure(payment);
 
         } else if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
-            await recoveryManager.handlePaymentCaptured(payment.razorpayPaymentId);
+            // await recoveryManager.handlePaymentCaptured(payment.razorpayPaymentId);
         }
 
         return { status: "processed", paymentId: payment.id };

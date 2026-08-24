@@ -75,6 +75,15 @@ class ConnectorManager {
     if (!record) return null;
     return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
   }
+
+  /**
+   * @param {string} id
+   */
+  async getDecryptedCredentialsById(id) {
+    const record = await this.credentialRepository.findById(id);
+    if (!record) return null;
+    return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
+  }
 }
 
 export default ConnectorManager;

@@ -15,8 +15,8 @@ export class WebhookEventWorker extends BaseWorkerService {
      * @param {import('bullmq').Job} job
      */
     async process(job) {
-        const { source, idempotencyKey, eventType, eventCategory, payload } = job.data;
-        console.log(`[WebhookEventWorker] Processing job ${job.id} for source ${source} and key ${idempotencyKey}`);
+        const { connectionId, source, idempotencyKey, eventType, eventCategory, payload } = job.data;
+        console.log(`[WebhookEventWorker] Processing job ${job.id} for source ${source} (connection: ${connectionId}) and key ${idempotencyKey}`);
 
         try {
             await this.prisma.$transaction(async (tx) => {
@@ -50,7 +50,7 @@ export class WebhookEventWorker extends BaseWorkerService {
                     throw new Error(`No webhook handler found for category: ${eventCategory}`);
                 }
 
-                await handler.handle({ body: payload, eventType, _tx: tx });
+                await handler.handle({ connectionId, body: payload, eventType, _tx: tx });
 
                 await tx.webhookEvent.update({
                     where: { id: eventRecord.id },

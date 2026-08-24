@@ -14,15 +14,17 @@ export class WebhookEventQueue extends BullQueueService {
     }
 
     /**
+     * @param {string} connectionId
      * @param {string} source - ex: "RAZORPAY"
      * @param {string} idempotencyKey - unique key
      * @param {string} eventType - The type of event (ex: payment.captured)
      * @param {string} eventCategory - The broad category of the event (ex: payment)
      * @param {object} payload
      */
-    async addEvent(source, idempotencyKey, eventType, eventCategory, payload) {
+    async addEvent(connectionId, source, idempotencyKey, eventType, eventCategory, payload) {
         const jobId = `${source}-${idempotencyKey}`.replace(/:/g, '-');
         return await this.addJob('process-webhook', {
+            connectionId,
             source,
             idempotencyKey,
             eventType,

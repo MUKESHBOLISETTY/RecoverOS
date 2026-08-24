@@ -15,9 +15,9 @@ function createWebhookRouter(webhookController) {
         legacyHeaders: false,
     });
 
-    router.post("/payment", limiter, validateWebhook, webhookController.ingestEvent);
+    router.post("/payment/:connectionId", limiter, validateWebhook, webhookController.ingestEvent);
 
-    router.post("/payment_downtime", limiter, validateWebhook, webhookController.ingestEvent);
+    router.post("/payment_downtime/:connectionId", limiter, validateWebhook, webhookController.ingestEvent);
 
     return router;
 }
