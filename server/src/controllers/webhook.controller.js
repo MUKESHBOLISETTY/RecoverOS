@@ -11,7 +11,6 @@ export class WebhookController {
     ingestEvent = async (req, res, next) => {
         try {
             let source, idempotencyKey, eventType, eventCategory;
-            console.log(req.body)
             if (req.headers['x-razorpay-event-id']) {
                 source = 'RAZORPAY';
                 idempotencyKey = req.headers['x-razorpay-event-id'];

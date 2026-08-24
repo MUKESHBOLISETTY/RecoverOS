@@ -3,7 +3,7 @@ import { BaseWorkerService } from './base-worker.service.js';
 export class WebhookEventWorker extends BaseWorkerService {
     /**
      * @param {import('@prisma/client').PrismaClient} prisma 
-     * @param {import('../webhook.service.js').WebhookService} webhookService 
+     * @param {import('../webhooks/webhook.service.js').WebhookService} webhookService 
      */
     constructor(prisma, webhookService) {
         super('webhook-events');

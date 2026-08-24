@@ -2,7 +2,7 @@ import { BaseCacheService } from './base-cache.service.js';
 
 export class RedisCacheService extends BaseCacheService {
     /**
-     * @param {import('ioredis').Redis} redisClient - Injected Redis client instance
+     * @param {import('ioredis').Redis} redisClient
      */
     constructor(redisClient) {
         super();

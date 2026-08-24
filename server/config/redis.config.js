@@ -1,13 +1,13 @@
 import { RedisConfig, defaultRedisConfig } from '../src/infrastructure/redis/redis-options.js';
 import { RedisConnectionManager, redisConnectionManager } from '../src/infrastructure/redis/redis-connection.manager.js';
-import { BaseCacheService } from '../src/services/cache/base-cache.service.js';
-import { RedisCacheService } from '../src/services/cache/redis-cache.service.js';
-import { BasePubSubService } from '../src/services/pubsub/base-pubsub.service.js';
-import { RedisPubSubService } from '../src/services/pubsub/redis-pubsub.service.js';
-import { BaseQueueService } from '../src/services/queue/base-queue.service.js';
-import { BullQueueService } from '../src/services/queue/bull-queue.service.js';
-import { BaseWorkerService } from '../src/services/queue/base-worker.service.js';
-import { EmailWorkerService } from '../src/services/queue/email-worker.service.js';
+import { BaseCacheService } from '../src/infrastructure/cache/base-cache.service.js';
+import { RedisCacheService } from '../src/infrastructure/cache/redis-cache.service.js';
+import { BasePubSubService } from '../src/infrastructure/pubsub/base-pubsub.service.js';
+import { RedisPubSubService } from '../src/infrastructure/pubsub/redis-pubsub.service.js';
+import { BaseQueueService } from '../src/infrastructure/queue/base-queue.service.js';
+import { BullQueueService } from '../src/infrastructure/queue/bull-queue.service.js';
+import { BaseWorkerService } from '../src/infrastructure/queue/base-worker.service.js';
+import { EmailWorkerService } from '../src/infrastructure/queue/email-worker.service.js';
 
 export const redisClient = redisConnectionManager.getConnection('default');
 export const redisPub = redisConnectionManager.getPublisherConnection('publisher');
@@ -21,17 +21,17 @@ export const emailWorkerService = new EmailWorkerService();
 export const emailQueue = emailQueueService.getUnderlyingQueue();
 export const emailWorker = emailWorkerService.getUnderlyingWorker();
 
-import { WebhookEventQueue } from '../src/services/queue/webhook-event.queue.js';
-import { WebhookEventWorker } from '../src/services/queue/webhook-event.worker.js';
+import { WebhookEventQueue } from '../src/infrastructure/queue/webhook-event.queue.js';
+import { WebhookEventWorker } from '../src/infrastructure/queue/webhook-event.worker.js';
 import { RedisIdempotencyStore } from '../src/infrastructure/idempotency/redis-idempotency.store.js';
-import { WebhookService } from '../src/services/webhook.service.js';
-import { PaymentWebhookHandler } from '../src/services/webhooks/payment-webhook.handler.js';
+import { WebhookService } from '../src/infrastructure/webhooks/webhook.service.js';
+import { PaymentWebhookHandler } from '../src/infrastructure/webhooks/payment-webhook.handler.js';
 import { prisma } from './database.config.js';
-import { PaymentDowntimeWebhookHandler } from '../src/services/webhooks/payment-downtime-webhook.handler.js';
+import { PaymentDowntimeWebhookHandler } from '../src/infrastructure/webhooks/payment-downtime-webhook.handler.js';
 import { RazorpayPaymentRepository } from '../src/infrastructure/razorpay/razorpay-payment.repository.js';
 import { ReconciliationService } from '../src/domain/payment/reconciliation.service.js';
-import { ReconciliationQueue } from '../src/services/queue/reconciliation-queue.js';
-import { ReconciliationWorker } from '../src/services/queue/reconciliation-worker.js';
+import { ReconciliationQueue } from '../src/infrastructure/queue/reconciliation-queue.js';
+import { ReconciliationWorker } from '../src/infrastructure/queue/reconciliation-worker.js';
 import { ReconciliationJob } from '../src/infrastructure/jobs/reconciliation.job.js';
 
 export const webhookService = new WebhookService([

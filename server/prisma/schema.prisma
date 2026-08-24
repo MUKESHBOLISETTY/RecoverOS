@@ -9,7 +9,7 @@ datasource db {
 }
 
 model WebhookEvent {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   source         String
   idempotencyKey String
   eventType      String
@@ -17,8 +17,8 @@ model WebhookEvent {
   status         String
   errorReason    String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([source, idempotencyKey])
 }
@@ -51,11 +51,11 @@ model Payment {
   tokenId           String?
   offerId           String?
 
-  createdAt         DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  correlations      PaymentFailureCorrelation[]
-  recoveryCases     RecoveryCase[]
+  correlations  PaymentFailureCorrelation[]
+  recoveryCases RecoveryCase[]
 
   @@index([razorpayPaymentId])
   @@index([customerId])
@@ -73,22 +73,22 @@ enum PaymentDowntimeStatus {
 }
 
 model PaymentDowntime {
-  id               String   @id @default(uuid()) @db.Uuid
-  razorpayId       String   @unique
-  entity           String   @default("payment.downtime")
+  id               String                @id @default(uuid()) @db.Uuid
+  razorpayId       String                @unique
+  entity           String                @default("payment.downtime")
   method           String
-  begin            DateTime @db.Timestamptz(3)
-  end              DateTime? @db.Timestamptz(3)
+  begin            DateTime              @db.Timestamptz(3)
+  end              DateTime?             @db.Timestamptz(3)
   status           PaymentDowntimeStatus
   scheduled        Boolean
   severity         String?
   instrument       Json?
   instrumentSchema Json?
-  createdAt        DateTime @db.Timestamptz(3)
-  updatedAt        DateTime @db.Timestamptz(3)
+  createdAt        DateTime              @db.Timestamptz(3)
+  updatedAt        DateTime              @db.Timestamptz(3)
   rawPayload       Json?
-  
-  correlations     PaymentFailureCorrelation[]
+
+  correlations PaymentFailureCorrelation[]
 
   @@index([method])
   @@index([status])
@@ -122,30 +122,30 @@ enum PaymentFailureCorrelationMatchType {
 }
 
 model PaymentFailureCorrelation {
-  id              String   @id @default(uuid()) @db.Uuid
-  paymentId       String   @db.Uuid
-  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  
-  downtimeId      String   @db.Uuid
-  downtime        PaymentDowntime @relation(fields: [downtimeId], references: [id], onDelete: Cascade)
-  
-  status          PaymentFailureCorrelationStatus @default(CANDIDATE)
-  confidence      PaymentFailureCorrelationConfidence
-  
-  explanation     String?  @db.Text
-  score           Decimal? @db.Decimal(5, 4)
-  matchedSignals  Json?
-  
+  id        String  @id @default(uuid()) @db.Uuid
+  paymentId String  @db.Uuid
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  downtimeId String          @db.Uuid
+  downtime   PaymentDowntime @relation(fields: [downtimeId], references: [id], onDelete: Cascade)
+
+  status     PaymentFailureCorrelationStatus     @default(CANDIDATE)
+  confidence PaymentFailureCorrelationConfidence
+
+  explanation    String?  @db.Text
+  score          Decimal? @db.Decimal(5, 4)
+  matchedSignals Json?
+
   paymentContext  Json?
   downtimeContext Json?
-  
-  correlatedAt    DateTime @default(now()) @db.Timestamptz(3)
-  evaluatedAt     DateTime @default(now()) @db.Timestamptz(3)
-  
-  createdAt       DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
 
-  recoveryCases   RecoveryCase[]
+  correlatedAt DateTime @default(now()) @db.Timestamptz(3)
+  evaluatedAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  recoveryCases RecoveryCase[]
 
   @@unique([paymentId, downtimeId])
   @@index([paymentId])
@@ -165,24 +165,24 @@ enum RecoveryCaseStatus {
 }
 
 model RecoveryCase {
-  id            String   @id @default(uuid()) @db.Uuid
-  paymentId     String   @db.Uuid
-  payment       Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  
-  correlationId String?  @db.Uuid
+  id        String  @id @default(uuid()) @db.Uuid
+  paymentId String  @db.Uuid
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  correlationId String?                    @db.Uuid
   correlation   PaymentFailureCorrelation? @relation(fields: [correlationId], references: [id], onDelete: SetNull)
-  
-  status        RecoveryCaseStatus @default(OPEN)
-  
+
+  status RecoveryCaseStatus @default(OPEN)
+
   // Snapshots for context
   paymentSnapshot Json?
   strategyApplied String?
-  
-  createdAt     DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
-  
-  actions       RecoveryAction[]
-  outcome       Outcome?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  actions RecoveryAction[]
+  outcome Outcome?
 }
 
 enum RecoveryActionType {
@@ -193,39 +193,69 @@ enum RecoveryActionType {
 }
 
 model RecoveryAction {
-  id             String   @id @default(uuid()) @db.Uuid
-  recoveryCaseId String   @db.Uuid
+  id             String       @id @default(uuid()) @db.Uuid
+  recoveryCaseId String       @db.Uuid
   recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
-  
-  type           RecoveryActionType
-  status         String
-  payload        Json?
-  
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  type    RecoveryActionType
+  status  String
+  payload Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model Outcome {
-  id             String   @id @default(uuid()) @db.Uuid
-  recoveryCaseId String   @unique @db.Uuid
+  id             String       @id @default(uuid()) @db.Uuid
+  recoveryCaseId String       @unique @db.Uuid
   recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
-  
-  successful     Boolean
+
+  successful      Boolean
   amountRecovered BigInt?
-  notes          String?  @db.Text
-  
-  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  notes           String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 model AuditEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  entityId    String   @db.Uuid
-  entityType  String
-  action      String
-  oldValue    Json?
-  newValue    Json?
-  actor       String?
-  
+  id         String  @id @default(uuid()) @db.Uuid
+  entityId   String  @db.Uuid
+  entityType String
+  action     String
+  oldValue   Json?
+  newValue   Json?
+  actor      String?
+
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   
   @@index([entityType, entityId])
 }
+
+model User {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String   @unique
+  password       String
+  emailVerified  Boolean  @default(true)
+  connections    Json?    @default("[]")
+  
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+  
+  deviceSessions DeviceSession[]
+
+  @@index([email])
+}
+
+model DeviceSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName  String   @default("Unknown Device")
+  ipAddress   String?
+  expiresAt   DateTime @db.Timestamptz(3)
+  
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+}
+

@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import "dotenv/config";
 import helmet from 'helmet';
 import webhookRoutes from './routes/webhook.routes.js';
+import authRoutes from './routes/auth.routes.js';
 import { connectDB } from '../config/database.config.js';
 import { connectRedis } from '../config/redis.config.js';
 
@@ -25,6 +26,7 @@ app.use(cors(corsoptions));
 app.set('trust proxy', 1);
 
 app.use('/webhooks', webhookRoutes);
+app.use('/auth', authRoutes);
 
 app.get('/', (req, res) => {
     return res.json({
