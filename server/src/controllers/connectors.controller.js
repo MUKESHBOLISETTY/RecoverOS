@@ -63,6 +63,25 @@ class ConnectorsController {
       res.status(500).json({ success: false, error: 'Failed to delete connection' });
     }
   };
+
+  syncConnection = async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const connectionId = req.params.id;
+
+      const connections = await this.connectorManager.getUserConnections(userId);
+      const ownsConnection = connections.some(c => c.id === connectionId);
+      if (!ownsConnection) {
+        return res.status(404).json({ success: false, error: 'Connection not found' });
+      }
+
+      const capabilities = await this.connectorManager.syncConnectorCapabilities(connectionId);
+      res.json({ success: true, data: capabilities, message: 'Capabilities synced successfully' });
+    } catch (error) {
+      console.error('Error syncing connection capabilities:', error);
+      res.status(500).json({ success: false, error: 'Failed to sync connection capabilities' });
+    }
+  };
 }
 
 export default ConnectorsController;

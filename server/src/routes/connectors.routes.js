@@ -15,6 +15,8 @@ function createConnectorsRouter(connectorsController) {
 
   router.post('/', connectorsController.saveConnection);
 
+  router.post('/:id/sync', connectorsController.syncConnection);
+
   router.delete('/:id', connectorsController.deleteConnection);
 
   return router;

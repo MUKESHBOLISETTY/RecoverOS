@@ -32,6 +32,52 @@ class RazorpayConnector extends ConnectorInterface {
       return false;
     }
   }
+
+  async getDynamicCapabilities(credentials) {
+    if (!credentials.keyId || !credentials.keySecret) {
+      return [];
+    }
+
+    try {
+      const rzp = new Razorpay({
+        key_id: credentials.keyId,
+        key_secret: credentials.keySecret
+      });
+
+      const webhooksResponse = await rzp.webhooks.all();
+      const webhooks = webhooksResponse?.items || [];
+
+      const events = new Set();
+      for (const wh of webhooks) {
+        if (wh.events && Array.isArray(wh.events)) {
+          for (const ev of wh.events) {
+            // Some events in razorpay might be boolean maps, but according to SDK it's array or object map. 
+            // In Razorpay v1 API, events can be boolean mapped objects or arrays depending on response.
+            if (typeof ev === 'string') {
+              events.add(ev);
+            } else if (typeof ev === 'object' && ev !== null) {
+              for (const [eventName, isActive] of Object.entries(ev)) {
+                if (isActive) {
+                  events.add(eventName);
+                }
+              }
+            }
+          }
+        } else if (wh.events && typeof wh.events === 'object') {
+          for (const [eventName, isActive] of Object.entries(wh.events)) {
+            if (isActive) {
+              events.add(eventName);
+            }
+          }
+        }
+      }
+
+      return Array.from(events);
+    } catch (error) {
+      console.error('Failed to fetch Razorpay dynamic capabilities:', error);
+      return [];
+    }
+  }
 }
 
 export default RazorpayConnector;

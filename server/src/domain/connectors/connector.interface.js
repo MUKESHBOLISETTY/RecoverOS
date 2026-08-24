@@ -13,6 +13,14 @@ class ConnectorInterface {
   async validateCredentials(credentials) {
     throw new Error('Method not implemented.');
   }
+
+  /**
+   * @param {Object} credentials 
+   * @returns {Promise<Array<string>>}
+   */
+  async getDynamicCapabilities(credentials) {
+    return [];
+  }
 }
 
 export default ConnectorInterface;

@@ -89,18 +89,60 @@ class ConnectorManager {
     const cacheKey = `connector_credential:${id}`;
 
     if (this.cacheService) {
-      record = await this.cacheService.get(cacheKey);
+      record = await this.cacheService.getJson(cacheKey);
     }
 
     if (!record) {
       record = await this.credentialRepository.findById(id);
       if (record && this.cacheService) {
-        await this.cacheService.set(cacheKey, record, 3600);
+        await this.cacheService.setJson(cacheKey, record, 3600);
       }
     }
 
     if (!record) return null;
     return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
+  }
+
+  /**
+   * @param {string} connectionId 
+   * @returns {Promise<Array<string>>}
+   */
+  async getConnectorCapabilities(connectionId) {
+    if (!connectionId) return [];
+
+    const cacheKey = `connector_capabilities:${connectionId}`;
+    if (this.cacheService) {
+      const cached = await this.cacheService.getJson(cacheKey);
+      if (cached) return cached;
+    }
+
+    return this.syncConnectorCapabilities(connectionId);
+  }
+
+  /**
+   * @param {string} connectionId 
+   * @returns {Promise<Array<string>>}
+   */
+  async syncConnectorCapabilities(connectionId) {
+    if (!connectionId) return [];
+
+    const credentials = await this.getDecryptedCredentialsById(connectionId);
+    if (!credentials) return [];
+
+    const record = await this.credentialRepository.findById(connectionId);
+    if (!record || !record.connectorId) return [];
+
+    const connector = this.connectorFactory.getConnector(record.connectorId);
+    if (!connector) return [];
+
+    const capabilities = await connector.getDynamicCapabilities(credentials);
+
+    if (this.cacheService) {
+      const cacheKey = `connector_capabilities:${connectionId}`;
+      await this.cacheService.setJson(cacheKey, capabilities, 3600); // 1 hour
+    }
+
+    return capabilities;
   }
 }
 
