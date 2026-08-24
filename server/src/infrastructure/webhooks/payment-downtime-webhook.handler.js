@@ -2,6 +2,9 @@ import { BaseWebhookHandler } from "./base-webhook.handler.js";
 import { CorrelationEngine } from "../../domain/correlation/correlation-engine.js";
 import { RecoveryManager } from "../../domain/recovery/recovery-manager.js";
 import { cacheService } from "../../../config/redis.config.js";
+import { AgentTriggerService } from "../../domain/agent/agent-trigger.service.js";
+import { PrismaAgentRepository } from "../db/agent/prisma-agent.repository.js";
+import { connectorManager } from "../../../config/connectors.config.js";
 
 export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
     constructor() {
@@ -24,6 +27,8 @@ export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
 
         const correlationEngine = new CorrelationEngine(prisma, cacheService);
         const recoveryManager = new RecoveryManager(prisma);
+        const agentRepository = new PrismaAgentRepository(prisma);
+        const agentTriggerService = new AgentTriggerService(agentRepository, connectorManager, cacheService);
 
         const downtimeData = body?.payload?.['payment.downtime']?.entity || body?.payload?.downtime?.entity;
 
@@ -64,12 +69,18 @@ export class PaymentDowntimeWebhookHandler extends BaseWebhookHandler {
 
         await correlationEngine.refreshDowntimesCache();
 
-        if (eventType === 'payment.downtime.updated' || eventType === 'payment.downtime.resolved') {
-            await correlationEngine.reevaluateCorrelationsForDowntime(downtime.id);
-        }
+        if (userId) {
+            const triggeredAgents = await agentTriggerService.evaluateTriggers(userId, eventType, body);
 
-        if (eventType === 'payment.downtime.resolved') {
-            // await recoveryManager.processResolvedDowntime(downtime.id);
+            if (triggeredAgents.length > 0) {
+                if (eventType === 'payment.downtime.updated' || eventType === 'payment.downtime.resolved') {
+                    await correlationEngine.reevaluateCorrelationsForDowntime(downtime.id);
+                }
+
+                if (eventType === 'payment.downtime.resolved') {
+                    // await recoveryManager.processResolvedDowntime(downtime.id);
+                }
+            }
         }
 
         return { status: "processed", downtimeId: downtime.id };

@@ -62,15 +62,16 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
             `(status: ${payment.status}, event: ${eventType})`
         );
 
-        if (eventType === 'payment.failed') {
-            await correlationEngine.correlatePaymentFailure(payment);
-
-        } else if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
-            // await recoveryManager.handlePaymentCaptured(payment.razorpayPaymentId);
-        }
-        // we will handle the ouput of agentTriggerService later
         if (userId) {
-            await agentTriggerService.evaluateTriggers(userId, eventType, body);
+            const triggeredAgents = await agentTriggerService.evaluateTriggers(userId, eventType, body);
+
+            if (triggeredAgents.length > 0) {
+                if (eventType === 'payment.failed') {
+                    await correlationEngine.correlatePaymentFailure(payment);
+                } else if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
+                    // await recoveryManager.handlePaymentCaptured(payment.razorpayPaymentId);
+                }
+            }
         }
 
         return { status: "processed", paymentId: payment.id };
