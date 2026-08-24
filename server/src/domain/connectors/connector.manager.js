@@ -5,10 +5,11 @@ class ConnectorManager {
    * @param {import('./credential-encryption.service.js').default} deps.encryptionService
    * @param {import('./connector-credential.repository.js').default} deps.credentialRepository
    */
-  constructor({ connectorFactory, encryptionService, credentialRepository }) {
+  constructor({ connectorFactory, encryptionService, credentialRepository, cacheService }) {
     this.connectorFactory = connectorFactory;
     this.encryptionService = encryptionService;
     this.credentialRepository = credentialRepository;
+    this.cacheService = cacheService;
   }
 
   /**
@@ -60,6 +61,9 @@ class ConnectorManager {
    * @param {string} userId 
    */
   async removeConnection(connectionId, userId) {
+    if (this.cacheService) {
+      await this.cacheService.del(`connector_credential:${connectionId}`);
+    }
     return this.credentialRepository.delete(connectionId, userId);
   }
 
@@ -80,7 +84,21 @@ class ConnectorManager {
    * @param {string} id
    */
   async getDecryptedCredentialsById(id) {
-    const record = await this.credentialRepository.findById(id);
+    if (!id) return null;
+    let record = null;
+    const cacheKey = `connector_credential:${id}`;
+
+    if (this.cacheService) {
+      record = await this.cacheService.get(cacheKey);
+    }
+
+    if (!record) {
+      record = await this.credentialRepository.findById(id);
+      if (record && this.cacheService) {
+        await this.cacheService.set(cacheKey, record, 3600);
+      }
+    }
+
     if (!record) return null;
     return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
   }

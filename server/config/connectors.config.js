@@ -1,4 +1,5 @@
 import { prisma } from './database.config.js';
+import { cacheService } from './redis.config.js';
 import PrismaConnectorCredentialRepository from '../src/infrastructure/db/connectors/prisma-connector-credential.repository.js';
 import CredentialEncryptionService from '../src/domain/connectors/credential-encryption.service.js';
 import ConnectorFactory from '../src/infrastructure/connectors/connector.factory.js';
@@ -12,7 +13,8 @@ const connectorFactory = new ConnectorFactory();
 const connectorManager = new ConnectorManager({
     connectorFactory,
     encryptionService,
-    credentialRepository: credentialRepo
+    credentialRepository: credentialRepo,
+    cacheService
 });
 
 const connectorsController = new ConnectorsController(connectorManager);
