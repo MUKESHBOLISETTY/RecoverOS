@@ -27,6 +27,17 @@ class PrismaConnectorCredentialRepository extends ConnectorCredentialRepository 
     });
   }
 
+  async findIdsByConnectorId(connectorId) {
+    return this.prisma.connectorCredential.findMany({
+      where: { connectorId },
+      select: {
+        id: true,
+        userId: true,
+        connectorId: true
+      }
+    });
+  }
+
   async create(data) {
     return this.prisma.connectorCredential.create({
       data: {

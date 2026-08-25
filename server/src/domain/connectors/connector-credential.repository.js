@@ -22,6 +22,14 @@ class ConnectorCredentialRepository {
   }
 
   /**
+   * @param {string} connectorId 
+   * @returns {Promise<Array<{id: string, userId: string, connectorId: string}>>}
+   */
+  async findIdsByConnectorId(connectorId) {
+    throw new Error('Method not implemented.');
+  }
+
+  /**
    * @param {Object} data 
    * @param {string} data.userId
    * @param {string} data.connectorId

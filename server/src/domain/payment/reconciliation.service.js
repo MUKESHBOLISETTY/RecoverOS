@@ -1,17 +1,19 @@
 import { PaymentMapper } from './payment-mapper.js';
 
+import { RazorpayPaymentRepository } from '../../infrastructure/razorpay/razorpay-payment.repository.js';
+
 export class ReconciliationService {
     /**
      * @param {import('@prisma/client').PrismaClient} prisma
-     * @param {import('../../infrastructure/razorpay/razorpay-payment.repository.js').RazorpayPaymentRepository} razorpayRepo
-     * @param {import('../../services/cache/base-cache.service.js').BaseCacheService} [cacheService]
+     * @param {import('../connectors/connector.manager.js').default} connectorManager
+     * @param {import('../../infrastructure/cache/base-cache.service.js').BaseCacheService} [cacheService]
      */
-    constructor(prisma, razorpayRepo, cacheService = null) {
+    constructor(prisma, connectorManager, cacheService = null) {
         if (!prisma) throw new Error('ReconciliationService: prisma is required');
-        if (!razorpayRepo) throw new Error('ReconciliationService: razorpayRepo is required');
+        if (!connectorManager) throw new Error('ReconciliationService: connectorManager is required');
 
         this.prisma = prisma;
-        this.razorpayRepo = razorpayRepo;
+        this.connectorManager = connectorManager;
         this.cacheService = cacheService;
 
         this.LOCK_KEY = 'reconciliation:lock';
@@ -52,11 +54,42 @@ export class ReconciliationService {
             `${fromDate.toISOString()} → ${toDate.toISOString()}`
         );
 
-        const razorpayPayments = await this.razorpayRepo.fetchAllInWindow(fromUnix, toUnix);
+        const connections = await this.connectorManager.getAllDecryptedCredentialsByConnectorId('razorpay');
+        
+        if (connections.length === 0) {
+            console.log('[ReconciliationService] No Razorpay connections found.');
+            return { skipped: false, upserted: 0, missing: 0, windowHours };
+        }
+
+        let totalUpserted = 0;
+        let totalMissing = 0;
+
+        for (const conn of connections) {
+            try {
+                const razorpayRepo = new RazorpayPaymentRepository(conn.credentials);
+                const res = await this._reconcileConnection(razorpayRepo, conn, fromUnix, toUnix);
+                totalUpserted += res.upserted;
+                totalMissing += res.missing;
+            } catch (error) {
+                console.error(`[ReconciliationService] Failed to reconcile connection ${conn.id}: ${error.message}`);
+            }
+        }
+
+        return { skipped: false, upserted: totalUpserted, missing: totalMissing, windowHours };
+    }
+
+    /**
+     * @param {RazorpayPaymentRepository} razorpayRepo
+     * @param {object} conn
+     * @param {number} fromUnix
+     * @param {number} toUnix
+     */
+    async _reconcileConnection(razorpayRepo, conn, fromUnix, toUnix) {
+        const razorpayPayments = await razorpayRepo.fetchAllInWindow(fromUnix, toUnix);
 
         if (razorpayPayments.length === 0) {
-            console.log('[ReconciliationService] No payments from Razorpay in window — nothing to reconcile.');
-            return { skipped: false, upserted: 0, missing: 0, windowHours };
+            console.log(`[ReconciliationService][Conn:${conn.id}] No payments in window.`);
+            return { upserted: 0, missing: 0 };
         }
 
         // absent or stale in DB
@@ -64,12 +97,12 @@ export class ReconciliationService {
         const missingIds = await this._findMissingOrStale(razorpayPayments, razorpayIds);
 
         if (missingIds.size === 0) {
-            console.log(`[ReconciliationService] All ${razorpayPayments.length} payments are already present — no gaps.`);
-            return { skipped: false, upserted: 0, missing: 0, windowHours };
+            console.log(`[ReconciliationService][Conn:${conn.id}] All ${razorpayPayments.length} payments already present.`);
+            return { upserted: 0, missing: 0 };
         }
 
         console.log(
-            `[ReconciliationService] Found ${missingIds.size} missing/stale payment(s) out of ` +
+            `[ReconciliationService][Conn:${conn.id}] Found ${missingIds.size} missing/stale payment(s) out of ` +
             `${razorpayPayments.length} — upserting...`
         );
 
@@ -78,13 +111,12 @@ export class ReconciliationService {
 
         for (let i = 0; i < toUpsert.length; i += this.BATCH_SIZE) {
             const batch = toUpsert.slice(i, i + this.BATCH_SIZE);
-            await this._upsertBatch(batch);
+            await this._upsertBatch(batch, conn);
             upserted += batch.length;
         }
 
-        console.log(`[ReconciliationService] Reconciliation complete — upserted ${upserted} payment(s).`);
-
-        return { skipped: false, upserted, missing: missingIds.size, windowHours };
+        console.log(`[ReconciliationService][Conn:${conn.id}] Complete — upserted ${upserted} payment(s).`);
+        return { upserted, missing: missingIds.size };
     }
 
     /**
@@ -113,14 +145,15 @@ export class ReconciliationService {
 
     /**
      * @param {object[]} entities
+     * @param {object} conn
      */
-    async _upsertBatch(entities) {
+    async _upsertBatch(entities, conn) {
         await this.prisma.$transaction(
             async (tx) => {
                 for (const entity of entities) {
                     await tx.payment.upsert({
                         where: { razorpayPaymentId: entity.id },
-                        create: PaymentMapper.toCreateInput(entity),
+                        create: PaymentMapper.toCreateInput(entity, { userId: conn.userId, connectionId: conn.id }),
                         update: PaymentMapper.toUpdateInput(entity),
                     });
                 }

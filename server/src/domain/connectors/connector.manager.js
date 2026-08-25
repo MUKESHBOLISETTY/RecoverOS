@@ -39,6 +39,10 @@ class ConnectorManager {
       authTag
     });
 
+    if (this.cacheService) {
+      await this.cacheService.del(`connector_credentials:ids:${connectorId}`);
+    }
+
     return { id: result.id, connectorId, name, category: metadata.category };
   }
 
@@ -62,7 +66,11 @@ class ConnectorManager {
    */
   async removeConnection(connectionId, userId) {
     if (this.cacheService) {
-      await this.cacheService.del(`connector_credential:${connectionId}`);
+      const record = await this.credentialRepository.findById(connectionId);
+      if (record) {
+        await this.cacheService.del(`connector_credential:${connectionId}`);
+        await this.cacheService.del(`connector_credentials:ids:${record.connectorId}`);
+      }
     }
     return this.credentialRepository.delete(connectionId, userId);
   }
@@ -81,7 +89,7 @@ class ConnectorManager {
   }
 
   /**
-   * @param {string} id
+   * @param {string} connectorId
    */
   async getDecryptedCredentialsById(id) {
     if (!id) return null;
@@ -101,6 +109,50 @@ class ConnectorManager {
 
     if (!record) return null;
     return this.encryptionService.decrypt(record.encryptedData, record.iv, record.authTag);
+  }
+
+  /**
+   * @param {string} connectorId
+   * @returns {Promise<Array<{id: string, userId: string, connectorId: string}>>}
+   */
+  async getAllConnectionIds(connectorId) {
+    const cacheKey = `connector_credentials:ids:${connectorId}`;
+    let ids = null;
+
+    if (this.cacheService) {
+      ids = await this.cacheService.getJson(cacheKey);
+    }
+
+    if (!ids) {
+      ids = await this.credentialRepository.findIdsByConnectorId(connectorId);
+      if (this.cacheService && ids) {
+        await this.cacheService.setJson(cacheKey, ids, 3600);
+      }
+    }
+
+    return ids || [];
+  }
+
+  /**
+   * @param {string} connectorId
+   * @returns {Promise<Array<{id: string, userId: string, credentials: Object}>>}
+   */
+  async getAllDecryptedCredentialsByConnectorId(connectorId) {
+    const connections = await this.getAllConnectionIds(connectorId);
+    
+    const results = [];
+    for (const conn of connections) {
+      const credentials = await this.getDecryptedCredentialsById(conn.id);
+      if (credentials) {
+        results.push({
+          id: conn.id,
+          userId: conn.userId,
+          credentials
+        });
+      }
+    }
+    
+    return results;
   }
 
   /**

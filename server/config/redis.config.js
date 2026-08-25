@@ -42,27 +42,9 @@ export const idempotencyStore = new RedisIdempotencyStore(cacheService);
 export const webhookEventQueueService = new WebhookEventQueue();
 export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookService);
 
-function createReconciliationInfra() {
-    try {
-        const razorpayRepo = new RazorpayPaymentRepository();
-        const reconciliationSvc = new ReconciliationService(prisma, razorpayRepo, cacheService);
-        const reconciliationQueue = new ReconciliationQueue();
-        const reconciliationWorker = new ReconciliationWorker(reconciliationSvc);
-        const reconciliationJob = new ReconciliationJob(reconciliationQueue);
-        return { reconciliationQueue, reconciliationWorker, reconciliationJob };
-    } catch (err) {
-        console.warn(
-            `[ReconciliationInfra] Could not initialise reconciliation: ${err.message}. ` +
-            'Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable it.'
-        );
-        return null;
-    }
-}
-
-const _reconciliation = createReconciliationInfra();
-export const reconciliationQueue = _reconciliation?.reconciliationQueue ?? null;
-export const reconciliationWorker = _reconciliation?.reconciliationWorker ?? null;
-export const reconciliationJob = _reconciliation?.reconciliationJob ?? null;
+export let reconciliationQueue = null;
+export let reconciliationWorker = null;
+export let reconciliationJob = null;
 
 
 export async function connectRedis() {
@@ -83,6 +65,18 @@ export async function connectRedis() {
         if (process.env.START_WORKERS === 'true' || process.env.NODE_ENV === 'development') {
             await emailWorkerService.start();
             await webhookEventWorkerService.start();
+
+            if (!reconciliationQueue) {
+                try {
+                    const { connectorManager } = await import('./connectors.config.js');
+                    const reconciliationSvc = new ReconciliationService(prisma, connectorManager, cacheService);
+                    reconciliationQueue = new ReconciliationQueue();
+                    reconciliationWorker = new ReconciliationWorker(reconciliationSvc);
+                    reconciliationJob = new ReconciliationJob(reconciliationQueue);
+                } catch (err) {
+                    console.warn(`[ReconciliationInfra] Could not initialise reconciliation: ${err.message}`);
+                }
+            }
 
             if (reconciliationWorker && reconciliationJob) {
                 reconciliationWorker.start();

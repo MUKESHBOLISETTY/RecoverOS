@@ -31,8 +31,8 @@ export class AgentTriggerService {
             let activeAgents = [];
             if (this.cacheService) {
                 activeAgents = await this.cacheService.remember(
-                    `active_agents:${userId}`, 
-                    3600, 
+                    `active_agents:${userId}`,
+                    3600,
                     () => this.agentRepository.findActiveByUserId(userId)
                 );
             } else {
@@ -108,7 +108,6 @@ export class AgentTriggerService {
     }
 
     /**
-     * Call this when a user's agents are created, updated, or deleted
      * @param {string} userId 
      */
     async clearUserCache(userId) {

@@ -1,11 +1,16 @@
 export class PaymentMapper {
     /**
     * @param {Object} entity
+    * @param {Object} [context]
+    * @param {string} [context.userId]
+    * @param {string} [context.connectionId]
      * @returns {import('@prisma/client').Prisma.PaymentCreateInput}
      */
-    static toCreateInput(entity) {
+    static toCreateInput(entity, context = {}) {
         return {
             razorpayPaymentId: entity.id,
+            userId: context.userId ?? null,
+            connectionId: context.connectionId ?? null,
             amount: BigInt(entity.amount),
             currency: entity.currency,
             status: entity.status,
