@@ -50,7 +50,15 @@ export class WebhookEventWorker extends BaseWorkerService {
                     throw new Error(`No webhook handler found for category: ${eventCategory}`);
                 }
 
-                await handler.handle({ connectionId, body: payload, eventType, _tx: tx });
+                await handler.handle({
+                    connectionId,
+                    body: payload,
+                    eventType,
+                    eventId: eventRecord.id,
+                    externalEventId: eventRecord.idempotencyKey,
+                    provider: source,
+                    _tx: tx
+                });
 
                 await tx.webhookEvent.update({
                     where: { id: eventRecord.id },

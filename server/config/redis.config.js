@@ -46,6 +46,12 @@ export let reconciliationQueue = null;
 export let reconciliationWorker = null;
 export let reconciliationJob = null;
 
+import { AgentExecutionQueue } from '../src/infrastructure/queue/agent-execution.queue.js';
+import { AgentExecutionWorker } from '../src/infrastructure/queue/agent-execution.worker.js';
+
+export const agentExecutionQueueService = new AgentExecutionQueue();
+export const agentExecutionWorkerService = new AgentExecutionWorker(prisma);
+
 
 export async function connectRedis() {
     try {
@@ -65,6 +71,7 @@ export async function connectRedis() {
         if (process.env.START_WORKERS === 'true' || process.env.NODE_ENV === 'development') {
             await emailWorkerService.start();
             await webhookEventWorkerService.start();
+            await agentExecutionWorkerService.start();
 
             if (!reconciliationQueue) {
                 try {
@@ -103,6 +110,8 @@ export async function disconnectRedis() {
 
         await webhookEventWorkerService.close();
         await webhookEventQueueService.close();
+        await agentExecutionWorkerService.close();
+        await agentExecutionQueueService.close();
         await emailWorkerService.close();
         await emailQueueService.close();
         await pubsubService.close();
@@ -140,6 +149,8 @@ export default {
     webhookEventQueue: webhookEventQueueService,
     webhookEventWorker: webhookEventWorkerService,
     webhookService: webhookService,
+    agentExecutionQueue: agentExecutionQueueService,
+    agentExecutionWorker: agentExecutionWorkerService,
     reconciliationQueue,
     reconciliationWorker,
     reconciliationJob,

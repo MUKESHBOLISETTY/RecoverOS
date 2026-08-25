@@ -6,6 +6,9 @@ import { cacheService } from "../../../config/redis.config.js";
 import { AgentTriggerService } from "../../domain/agent/agent-trigger.service.js";
 import { PrismaAgentRepository } from "../db/agent/prisma-agent.repository.js";
 import { connectorManager } from "../../../config/connectors.config.js";
+import { PrismaAgentExecutionRepository } from "../db/agent/prisma-agent-execution.repository.js";
+import { AgentExecutionService } from "../../domain/agent/agent-execution.service.js";
+import { agentExecutionQueueService } from "../../../config/redis.config.js";
 
 export class PaymentWebhookHandler extends BaseWebhookHandler {
     constructor() {
@@ -13,10 +16,10 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
     }
 
     /**
-     * @param {{ body: object, eventType: string, _tx: import('@prisma/client').PrismaClient }} webhook
+     * @param {{ body: object, eventType: string, eventId?: string, externalEventId?: string, provider?: string, _tx: import('@prisma/client').PrismaClient }} webhook
      */
     async handle(webhook) {
-        const { connectionId, body, eventType, _tx: prisma } = webhook;
+        const { connectionId, body, eventType, eventId, externalEventId, provider, _tx: prisma } = webhook;
 
         let userId = null;
         if (connectionId) {
@@ -33,6 +36,8 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
         const recoveryManager = new RecoveryManager(prisma);
         const agentRepository = new PrismaAgentRepository(prisma);
         const agentTriggerService = new AgentTriggerService(agentRepository, connectorManager, cacheService);
+        const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
+        const agentExecutionService = new AgentExecutionService(agentExecutionRepository, agentExecutionQueueService);
 
         const entity = body?.payload?.payment?.entity;
         if (!entity) {
@@ -70,6 +75,23 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                     await correlationEngine.correlatePaymentFailure(payment);
                 } else if (eventType === 'payment.captured' || eventType === 'payment.authorized') {
                     // await recoveryManager.handlePaymentCaptured(payment.razorpayPaymentId);
+                }
+
+                for (const agent of triggeredAgents) {
+                    try {
+                        const execution = await agentExecutionService.createExecution({
+                            agent,
+                            userId,
+                            eventId,
+                            eventType,
+                            provider,
+                            externalEventId,
+                            inputContext: { paymentId: payment.id, body }
+                        });
+                        await agentExecutionService.enqueueExecution(execution);
+                    } catch (err) {
+                        console.error(`[PaymentWebhookHandler] Failed to create/enqueue execution for Agent ${agent.id}:`, err);
+                    }
                 }
             }
         }
