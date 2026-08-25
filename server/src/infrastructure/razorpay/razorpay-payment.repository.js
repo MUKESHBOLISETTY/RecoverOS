@@ -1,4 +1,5 @@
 import "dotenv/config";
+import Razorpay from 'razorpay';
 
 export class RazorpayPaymentRepository {
     /**
@@ -16,14 +17,14 @@ export class RazorpayPaymentRepository {
             );
         }
 
-        this._authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-        this._baseUrl = 'https://api.razorpay.com/v1';
+        this.razorpay = new Razorpay({
+            key_id: keyId,
+            key_secret: keySecret
+        });
 
         this.PAGE_SIZE = 100;
-
         this.MAX_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-
-        this.REQUEST_DELAY_MS = 200; //delay for fetch
+        this.REQUEST_DELAY_MS = 200; // delay for fetch
     }
 
     /**
@@ -33,35 +34,21 @@ export class RazorpayPaymentRepository {
      * @returns {Promise<{items: object[], count: number}>}
      */
     async fetchPage(fromUnix, toUnix, skip = 0) {
-        const params = new URLSearchParams({
-            from: String(fromUnix),
-            to: String(toUnix),
-            count: String(this.PAGE_SIZE),
-            skip: String(skip),
-        });
+        try {
+            const data = await this.razorpay.payments.all({
+                from: fromUnix,
+                to: toUnix,
+                count: this.PAGE_SIZE,
+                skip: skip
+            });
 
-        const url = `${this._baseUrl}/payments?${params}`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                Authorization: this._authHeader,
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const body = await response.text();
-            throw new Error(
-                `RazorpayPaymentRepository: HTTP ${response.status} fetching payments. Body: ${body}`
-            );
+            return {
+                items: data.items || [],
+                count: data.count || 0,
+            };
+        } catch (error) {
+            throw new Error(`RazorpayPaymentRepository: Failed to fetch payments page. Error: ${error.message}`);
         }
-
-        const data = await response.json();
-        return {
-            items: data.items || [],
-            count: data.count || 0,
-        };
     }
 
     /**
@@ -100,24 +87,11 @@ export class RazorpayPaymentRepository {
      * @returns {Promise<object>}
      */
     async fetchById(paymentId) {
-        const url = `${this._baseUrl}/payments/${paymentId}`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                Authorization: this._authHeader,
-                'Content-Type': 'application/json',
-            },
-        });
-
-        if (!response.ok) {
-            const body = await response.text();
-            throw new Error(
-                `RazorpayPaymentRepository: HTTP ${response.status} fetching payment ${paymentId}. Body: ${body}`
-            );
+        try {
+            return await this.razorpay.payments.fetch(paymentId);
+        } catch (error) {
+            throw new Error(`RazorpayPaymentRepository: Failed to fetch payment ${paymentId}. Error: ${error.message}`);
         }
-
-        return await response.json();
     }
 
     /**
