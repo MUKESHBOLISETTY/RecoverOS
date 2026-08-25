@@ -8,6 +8,7 @@ import { PrismaAgentRepository } from "../db/agent/prisma-agent.repository.js";
 import { connectorManager } from "../../../config/connectors.config.js";
 import { PrismaAgentExecutionRepository } from "../db/agent/prisma-agent-execution.repository.js";
 import { AgentExecutionService } from "../../domain/agent/agent-execution.service.js";
+import { prisma as globalPrisma } from "../../../config/database.config.js";
 import { agentExecutionQueueService } from "../../../config/redis.config.js";
 
 export class PaymentWebhookHandler extends BaseWebhookHandler {
@@ -19,7 +20,7 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
      * @param {{ body: object, eventType: string, eventId?: string, externalEventId?: string, provider?: string, _tx: import('@prisma/client').PrismaClient }} webhook
      */
     async handle(webhook) {
-        const { connectionId, body, eventType, eventId, externalEventId, provider, _tx: prisma } = webhook;
+        const { connectionId, body, eventType, eventId, externalEventId, provider, _tx: prisma, postCommitHooks } = webhook;
 
         let userId = null;
         if (connectionId) {
@@ -88,7 +89,17 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                             externalEventId,
                             inputContext: { paymentId: payment.id, body }
                         });
-                        await agentExecutionService.enqueueExecution(execution);
+
+                        if (postCommitHooks) {
+                            postCommitHooks.push(async () => {
+                                const globalRepo = new PrismaAgentExecutionRepository(globalPrisma);
+                                const globalService = new AgentExecutionService(globalRepo, agentExecutionQueueService);
+                                await globalService.enqueueExecution(execution);
+                            });
+                        } else {
+                            // Fallback
+                            await agentExecutionService.enqueueExecution(execution);
+                        }
                     } catch (err) {
                         console.error(`[PaymentWebhookHandler] Failed to create/enqueue execution for Agent ${agent.id}:`, err);
                     }

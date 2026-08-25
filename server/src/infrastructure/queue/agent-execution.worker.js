@@ -40,14 +40,80 @@ export class AgentExecutionWorker extends BaseWorkerService {
 
             console.log(`[AgentExecutionWorker] Execution ${executionId} is now RUNNING.`);
 
-            //agent runtime service
+            const { eventType, inputContext, provider } = execution;
+            let fullContext = null;
+
+            if (eventType && eventType.startsWith('payment.')) {
+                console.log(`[AgentExecutionWorker] Detected payment event. Building RecoveryContext...`);
+
+                const { RecoveryContextBuilder } = await import('../../domain/recovery/recovery-context.builder.js');
+                const { FailureDiagnosisService } = await import('../../domain/recovery/failure-diagnosis.service.js');
+                const { OrderContextService } = await import('../../domain/recovery/order-context.service.js');
+                const { RazorpayOrderRepository } = await import('../../infrastructure/razorpay/razorpay-order.repository.js');
+                const { cacheService } = await import('../../../config/redis.config.js');
+                const { connectorManager } = await import('../../../config/connectors.config.js');
+
+                const paymentId = inputContext?.paymentId;
+
+                if (paymentId) {
+                    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+
+                    if (payment) {
+                        let credentials = {};
+                        if (payment.connectionId) {
+                            credentials = await connectorManager.getDecryptedCredentialsById(payment.connectionId) || {};
+                        }
+
+                        const failureDiagnosisService = new FailureDiagnosisService();
+                        const orderRepository = new RazorpayOrderRepository(credentials);
+                        const orderContextService = new OrderContextService(orderRepository, cacheService);
+                        const contextBuilder = new RecoveryContextBuilder(failureDiagnosisService, orderContextService);
+
+                        const downtimeCorrelation = await this.prisma.paymentFailureCorrelation.findFirst({
+                            where: { paymentId: payment.id },
+                            orderBy: { evaluatedAt: 'desc' }
+                        });
+
+                        const agentConfig = await this.prisma.agent.findUnique({ where: { id: execution.agentId } });
+
+                        fullContext = await contextBuilder.buildContext({
+                            event: {
+                                id: execution.eventId,
+                                type: execution.eventType,
+                                occurredAt: new Date().toISOString()
+                            },
+                            payment,
+                            provider,
+                            downtimeCorrelation,
+                            agent: agentConfig
+                        });
+
+                        console.log(`[AgentExecutionWorker] Successfully built RecoveryContext for payment ${payment.id}.`);
+                    }
+                }
+                //we will implement this later
+            } else if (eventType && eventType.startsWith('cart.')) {
+                console.log(`[AgentExecutionWorker] Detected cart event. Placeholder for CartContextBuilder.`);
+                // fullContext = await cartContextBuilder.buildContext({...})
+            }
+
+            if (fullContext) {
+                await this.prisma.agentExecution.update({
+                    where: { id: executionId },
+                    data: {
+                        inputContext: fullContext
+                    }
+                });
+            }
+
+            //agent runtime service placeholder
 
             await this.prisma.agentExecution.update({
                 where: { id: executionId },
                 data: {
                     status: 'SUCCEEDED',
                     completedAt: new Date(),
-                    result: { note: 'Placeholder for future integration' }
+                    result: { note: 'Placeholder for future integration', contextBuilt: !!fullContext }
                 }
             });
 

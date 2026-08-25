@@ -19,6 +19,7 @@ export class WebhookEventWorker extends BaseWorkerService {
         console.log(`[WebhookEventWorker] Processing job ${job.id} for source ${source} (connection: ${connectionId}) and key ${idempotencyKey}`);
 
         try {
+            const postCommitHooks = [];
             await this.prisma.$transaction(async (tx) => {
                 let eventRecord = await tx.webhookEvent.findUnique({
                     where: { source_idempotencyKey: { source, idempotencyKey } }
@@ -57,7 +58,8 @@ export class WebhookEventWorker extends BaseWorkerService {
                     eventId: eventRecord.id,
                     externalEventId: eventRecord.idempotencyKey,
                     provider: source,
-                    _tx: tx
+                    _tx: tx,
+                    postCommitHooks
                 });
 
                 await tx.webhookEvent.update({
@@ -67,6 +69,14 @@ export class WebhookEventWorker extends BaseWorkerService {
             }, {
                 timeout: 15000
             });
+
+            for (const hook of postCommitHooks) {
+                try {
+                    await hook();
+                } catch (hookError) {
+                    console.error(`[WebhookEventWorker] Failed to execute post-commit hook for job ${job.id}:`, hookError);
+                }
+            }
 
             console.log(`[WebhookEventWorker] Successfully processed job ${job.id}`);
         } catch (error) {
