@@ -2,13 +2,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaUserRepository } from '../../infrastructure/db/user/prisma-user.repository.js';
 import { PrismaDeviceSessionRepository } from '../../infrastructure/db/user/prisma-device-session.repository.js';
-import { redisConnectionManager } from '../../infrastructure/redis/redis-connection.manager.js';
 
 export class AuthService {
     constructor() {
         this.userRepository = new PrismaUserRepository();
         this.deviceSessionRepository = new PrismaDeviceSessionRepository();
-        this.redisClient = redisConnectionManager.getConnection();
         this.jwtSecret = process.env.JWT_SECRET;
         this.sessionPrefix = 'session:';
     }

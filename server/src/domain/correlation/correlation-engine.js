@@ -24,7 +24,7 @@ export class CorrelationEngine {
             }
         });
 
-        await this.cacheService.set(this.CACHE_KEY, JSON.stringify(activeDowntimes), 3600); // 1 hour
+        await this.cacheService.setJson(this.CACHE_KEY, activeDowntimes, 3600); // 1 hour
         return activeDowntimes;
     }
 
@@ -36,9 +36,9 @@ export class CorrelationEngine {
         let candidateDowntimes = [];
 
         if (this.cacheService) {
-            const cached = await this.cacheService.get(this.CACHE_KEY);
+            const cached = await this.cacheService.getJson(this.CACHE_KEY);
             if (cached) {
-                candidateDowntimes = JSON.parse(cached);
+                candidateDowntimes = cached;
             } else {
                 candidateDowntimes = await this.refreshDowntimesCache();
             }
