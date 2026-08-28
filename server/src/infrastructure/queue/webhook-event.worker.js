@@ -2,12 +2,14 @@ import { BaseWorkerService } from './base-worker.service.js';
 
 export class WebhookEventWorker extends BaseWorkerService {
     /**
-     * @param {import('@prisma/client').PrismaClient} prisma 
+     * @param {import('@prisma/client').PrismaClient} prisma
+     * @param {import('../db/webhook/prisma-webhook-event.repository.js').PrismaWebhookEventRepository} webhookEventRepository
      * @param {import('../webhooks/webhook.service.js').WebhookService} webhookService 
      */
-    constructor(prisma, webhookService) {
+    constructor(prisma, webhookEventRepository, webhookService) {
         super('webhook-events');
         this.prisma = prisma;
+        this.webhookEventRepository = webhookEventRepository;
         this.webhookService = webhookService;
     }
 
@@ -21,29 +23,22 @@ export class WebhookEventWorker extends BaseWorkerService {
         try {
             const postCommitHooks = [];
             await this.prisma.$transaction(async (tx) => {
-                let eventRecord = await tx.webhookEvent.findUnique({
-                    where: { source_idempotencyKey: { source, idempotencyKey } }
-                });
+                let eventRecord = await this.webhookEventRepository.findByIdempotencyKey(source, idempotencyKey, tx);
 
                 if (eventRecord) {
                     if (eventRecord.status === 'COMPLETED') {
                         console.log(`[WebhookEventWorker] Event ${source}:${idempotencyKey} is already COMPLETED in DB. Skipping processing.`);
                         return;
                     }
-                    eventRecord = await tx.webhookEvent.update({
-                        where: { id: eventRecord.id },
-                        data: { status: 'PENDING', errorReason: null }
-                    });
+                    eventRecord = await this.webhookEventRepository.update(eventRecord.id, { status: 'PENDING', errorReason: null }, tx);
                 } else {
-                    eventRecord = await tx.webhookEvent.create({
-                        data: {
-                            source,
-                            idempotencyKey,
-                            eventType,
-                            payload,
-                            status: 'PENDING'
-                        }
-                    });
+                    eventRecord = await this.webhookEventRepository.create({
+                        source,
+                        idempotencyKey,
+                        eventType,
+                        payload,
+                        status: 'PENDING'
+                    }, tx);
                 }
 
                 const handler = this.webhookService.handlers.get(eventCategory || 'unknown');
@@ -62,10 +57,7 @@ export class WebhookEventWorker extends BaseWorkerService {
                     postCommitHooks
                 });
 
-                await tx.webhookEvent.update({
-                    where: { id: eventRecord.id },
-                    data: { status: 'COMPLETED' }
-                });
+                await this.webhookEventRepository.update(eventRecord.id, { status: 'COMPLETED' }, tx);
             }, {
                 timeout: 15000
             });
@@ -83,13 +75,7 @@ export class WebhookEventWorker extends BaseWorkerService {
             console.error(`[WebhookEventWorker] Failed to process job ${job.id}:`, error);
 
             try {
-                await this.prisma.webhookEvent.update({
-                    where: { source_idempotencyKey: { source, idempotencyKey } },
-                    data: {
-                        status: 'FAILED',
-                        errorReason: error.message || 'Unknown error'
-                    }
-                });
+                await this.webhookEventRepository.markFailed(source, idempotencyKey, error.message || 'Unknown error');
             } catch (dbError) {
                 console.error(`[WebhookEventWorker] Failed to update error status for ${job.id}:`, dbError);
             }

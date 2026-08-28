@@ -2,11 +2,13 @@ import { CorrelationRules } from './correlation-rules.js';
 
 export class CorrelationEngine {
     /**
-     * @param {import('@prisma/client').PrismaClient} prisma
-     * @param {import('../../services/cache/base-cache.service.js').BaseCacheService} cacheService
+     * @param {import('./payment-downtime.repository.js').PaymentDowntimeRepository} paymentDowntimeRepository
+     * @param {import('./payment-failure-correlation.repository.js').PaymentFailureCorrelationRepository} paymentFailureCorrelationRepository
+     * @param {import('../../infrastructure/cache/base-cache.service.js').BaseCacheService} cacheService
      */
-    constructor(prisma, cacheService = null) {
-        this.prisma = prisma;
+    constructor(paymentDowntimeRepository, paymentFailureCorrelationRepository, cacheService = null) {
+        this.paymentDowntimeRepository = paymentDowntimeRepository;
+        this.paymentFailureCorrelationRepository = paymentFailureCorrelationRepository;
         this.cacheService = cacheService;
         this.CACHE_KEY = 'correlation:active_downtimes';
     }
@@ -14,15 +16,7 @@ export class CorrelationEngine {
     async refreshDowntimesCache() {
         if (!this.cacheService) return null;
 
-        const activeDowntimes = await this.prisma.paymentDowntime.findMany({
-            where: {
-                OR: [
-                    { status: 'STARTED' },
-                    { status: 'UPDATED' },
-                    { status: 'RESOLVED' }
-                ]
-            }
-        });
+        const activeDowntimes = await this.paymentDowntimeRepository.findActive();
 
         await this.cacheService.setJson(this.CACHE_KEY, activeDowntimes, 3600); // 1 hour
         return activeDowntimes;
@@ -43,15 +37,7 @@ export class CorrelationEngine {
                 candidateDowntimes = await this.refreshDowntimesCache();
             }
         } else {
-            candidateDowntimes = await this.prisma.paymentDowntime.findMany({
-                where: {
-                    OR: [
-                        { status: 'STARTED' },
-                        { status: 'UPDATED' },
-                        { status: 'RESOLVED' }
-                    ]
-                }
-            });
+            candidateDowntimes = await this.paymentDowntimeRepository.findActive();
         }
 
         //remove resolved downtimes that ended before payment
@@ -64,56 +50,33 @@ export class CorrelationEngine {
 
         if (candidateDowntimes.length === 0) return [];
 
-        return await this.prisma.$transaction(async (tx) => {
-            const correlations = [];
+        const correlations = [];
 
-            for (const downtime of candidateDowntimes) {
-                const { score, matchedSignals } = CorrelationRules.evaluate(payment, downtime);
-                const confidence = CorrelationRules.getConfidence(score);
+        for (const downtime of candidateDowntimes) {
+            const { score, matchedSignals } = CorrelationRules.evaluate(payment, downtime);
+            const confidence = CorrelationRules.getConfidence(score);
 
-                if (score > 0) {
-                    const correlation = await tx.paymentFailureCorrelation.upsert({
-                        where: {
-                            paymentId_downtimeId: {
-                                paymentId: payment.id,
-                                downtimeId: downtime.id
-                            }
-                        },
-                        update: {
-                            status: confidence === 'HIGH' ? 'MATCHED' : 'CANDIDATE',
-                            confidence,
-                            score,
-                            matchedSignals,
-                            evaluatedAt: new Date()
-                        },
-                        create: {
-                            paymentId: payment.id,
-                            downtimeId: downtime.id,
-                            status: confidence === 'HIGH' ? 'MATCHED' : 'CANDIDATE',
-                            confidence,
-                            score,
-                            matchedSignals,
-                            paymentContext: payment,
-                            downtimeContext: downtime,
-                            explanation: `Payment failed with ${matchedSignals.length} matched signals including ${matchedSignals.join(', ')}.`
-                        }
-                    });
-
-                    correlations.push(correlation);
-                }
+            if (score > 0) {
+                const correlation = await this.paymentFailureCorrelationRepository.upsertCorrelation(
+                    payment,
+                    downtime,
+                    confidence === 'HIGH' ? 'MATCHED' : 'CANDIDATE',
+                    confidence,
+                    score,
+                    matchedSignals
+                );
+                correlations.push(correlation);
             }
+        }
 
-            return correlations;
-        });
+        return correlations;
     }
 
     /**
      * @param {string} downtimeId 
      */
     async reevaluateCorrelationsForDowntime(downtimeId) {
-        const downtime = await this.prisma.paymentDowntime.findUnique({
-            where: { id: downtimeId }
-        });
+        const downtime = await this.paymentDowntimeRepository.findById(downtimeId);
 
         if (!downtime) return;
 
@@ -122,43 +85,14 @@ export class CorrelationEngine {
         let hasMore = true;
 
         while (hasMore) {
-            const queryParams = {
-                where: { downtimeId },
-                include: { payment: true },
-                take: BATCH_SIZE,
-                orderBy: { id: 'asc' }
-            };
-
-            if (cursor) {
-                queryParams.cursor = { id: cursor };
-                queryParams.skip = 1;
-            }
-
-            const batch = await this.prisma.paymentFailureCorrelation.findMany(queryParams);
+            const batch = await this.paymentFailureCorrelationRepository.findBatchByDowntimeId(downtimeId, cursor, BATCH_SIZE);
 
             if (batch.length === 0) {
                 hasMore = false;
                 break;
             }
 
-            await this.prisma.$transaction(async (tx) => {
-                for (const correlation of batch) {
-                    const { score, matchedSignals } = CorrelationRules.evaluate(correlation.payment, downtime);
-                    const confidence = CorrelationRules.getConfidence(score);
-
-                    await tx.paymentFailureCorrelation.update({
-                        where: { id: correlation.id },
-                        data: {
-                            status: confidence === 'HIGH' ? 'MATCHED' : 'CANDIDATE',
-                            confidence,
-                            score,
-                            matchedSignals,
-                            evaluatedAt: new Date(),
-                            downtimeContext: downtime
-                        }
-                    });
-                }
-            });
+            await this.paymentFailureCorrelationRepository.updateBatch(batch, downtime);
 
             if (batch.length === BATCH_SIZE) {
                 cursor = batch[batch.length - 1].id;

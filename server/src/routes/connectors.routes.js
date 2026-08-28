@@ -7,9 +7,13 @@ import { authenticateUser } from '../middlewares/auth.middleware.js';
 function createConnectorsRouter(connectorsController) {
   const router = express.Router();
 
+  router.get('/google/callback', connectorsController.handleGoogleCallback);
+
   router.use(authenticateUser);
 
   router.get('/available', connectorsController.getAvailableConnectors);
+
+  router.post('/google/init', connectorsController.initGoogleOAuth);
 
   router.get('/', connectorsController.getUserConnections);
 

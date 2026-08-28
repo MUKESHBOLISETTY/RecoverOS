@@ -34,10 +34,10 @@ export class AgentExecutionService {
                 agentId: input.agent.id,
                 agentVersion: input.agent.version,
                 userId: input.userId,
-                eventId: input.eventId || null,
-                eventType: input.eventType,
+                triggerType: input.triggerType || 'PROVIDER_EVENT',
+                triggerId: input.triggerId || null,
+                externalTriggerId: input.externalTriggerId || null,
                 provider: input.provider || null,
-                externalEventId: input.externalEventId || null,
                 inputContext: input.inputContext || null,
                 status: 'QUEUED'
             };

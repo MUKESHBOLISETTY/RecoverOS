@@ -1,18 +1,22 @@
 import { PaymentMapper } from './payment-mapper.js';
 
-import { RazorpayPaymentRepository } from '../../infrastructure/razorpay/razorpay-payment.repository.js';
-
 export class HistoricalBackfillService {
     /**
-     * @param {import('@prisma/client').PrismaClient} prisma
+     * @param {import('../connectors/connector-credential.repository.js').ConnectorCredentialRepository} connectorCredentialRepository
+     * @param {import('./payment.repository.js').PaymentRepository} paymentRepository
      * @param {import('../connectors/connector.manager.js').default} connectorManager
+     * @param {function(Object): Object} razorpayRepoFactory
      */
-    constructor(prisma, connectorManager) {
-        if (!prisma) throw new Error('HistoricalBackfillService: prisma is required');
+    constructor(connectorCredentialRepository, paymentRepository, connectorManager, razorpayRepoFactory) {
+        if (!connectorCredentialRepository) throw new Error('HistoricalBackfillService: connectorCredentialRepository is required');
+        if (!paymentRepository) throw new Error('HistoricalBackfillService: paymentRepository is required');
         if (!connectorManager) throw new Error('HistoricalBackfillService: connectorManager is required');
+        if (!razorpayRepoFactory) throw new Error('HistoricalBackfillService: razorpayRepoFactory is required');
 
-        this.prisma = prisma;
+        this.connectorCredentialRepository = connectorCredentialRepository;
+        this.paymentRepository = paymentRepository;
         this.connectorManager = connectorManager;
+        this.razorpayRepoFactory = razorpayRepoFactory;
 
         this.BATCH_SIZE = 50;
     }
@@ -37,12 +41,12 @@ export class HistoricalBackfillService {
             throw new Error(`HistoricalBackfillService.run: Invalid connectionId ${connectionId}`);
         }
 
-        const record = await this.prisma.connectorCredential.findUnique({ where: { id: connectionId } });
+        const record = await this.connectorCredentialRepository.findById(connectionId);
         if (!record || record.connectorId !== 'razorpay') {
             throw new Error(`HistoricalBackfillService.run: Connection ${connectionId} is not a valid razorpay connection`);
         }
 
-        const razorpayRepo = new RazorpayPaymentRepository(credentialsObj);
+        const razorpayRepo = this.razorpayRepoFactory(credentialsObj);
 
         console.log(
             `[HistoricalBackfillService] Starting backfill for conn: ${connectionId}: ` +
@@ -71,6 +75,7 @@ export class HistoricalBackfillService {
                 const msg = `Window ${new Date(window.fromUnix * 1000).toISOString()} failed: ${error.message}`;
                 console.error(`[HistoricalBackfillService] ${msg}`);
                 result.errors.push(msg);
+
             }
         }
 
@@ -119,20 +124,10 @@ export class HistoricalBackfillService {
      * @param {object} connContext
      */
     async _upsertBatch(entities, connContext) {
-        await this.prisma.$transaction(
-            async (tx) => {
-                for (const entity of entities) {
-                    const createData = PaymentMapper.toCreateInput(entity, { userId: connContext.userId, connectionId: connContext.id });
-                    const updateData = PaymentMapper.toUpdateInput(entity);
-
-                    await tx.payment.upsert({
-                        where: { razorpayPaymentId: entity.id },
-                        create: createData,
-                        update: updateData,
-                    });
-                }
-            },
-            { timeout: 30_000 }
+        await this.paymentRepository.upsertBatch(
+            entities,
+            (entity) => PaymentMapper.toCreateInput(entity, { userId: connContext.userId, connectionId: connContext.id }),
+            (entity) => PaymentMapper.toUpdateInput(entity)
         );
     }
 }

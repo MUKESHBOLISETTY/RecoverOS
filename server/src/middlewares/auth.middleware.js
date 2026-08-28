@@ -1,6 +1,4 @@
-import { AuthService } from '../domain/auth/auth.service.js';
-
-const authService = new AuthService();
+import { authService } from '../../config/auth.config.js';
 
 export const authenticateUser = async (req, res, next) => {
     try {

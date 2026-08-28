@@ -22,24 +22,26 @@ export class PrismaAgentExecutionRepository extends AgentExecutionRepository {
         } catch (error) {
             if (error.code === 'P2002') {
                 const { DuplicateExecutionError } = await import('../../../domain/agent/errors/duplicate-execution.error.js');
-                throw new DuplicateExecutionError(data.agentId, data.eventId);
+                throw new DuplicateExecutionError(data.agentId, data.triggerId);
             }
             throw error;
         }
     }
 
     /**
-     * @param {string} agentId 
-     * @param {string} eventId 
-     * @param {import('@prisma/client').PrismaClient} [tx] 
+     * @param {string} agentId
+     * @param {string} triggerType
+     * @param {string|null} triggerId
+     * @param {import('@prisma/client').PrismaClient} [tx]
      */
-    async findByAgentAndEvent(agentId, eventId, tx) {
+    async findByAgentAndEvent(agentId, triggerType, triggerId, tx) {
         const client = tx || this.prisma;
         return await client.agentExecution.findUnique({
             where: {
-                agentId_eventId: {
+                agentId_triggerType_triggerId: {
                     agentId,
-                    eventId
+                    triggerType,
+                    triggerId: triggerId || null
                 }
             }
         });
@@ -62,6 +64,45 @@ export class PrismaAgentExecutionRepository extends AgentExecutionRepository {
         return await this.prisma.agentExecution.update({
             where: { id },
             data
+        });
+    }
+
+    async markCompleted(executionId, result) {
+        return await this.prisma.$transaction(async (tx) => {
+            return await tx.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'SUCCEEDED',
+                    result: result || {},
+                    completedAt: new Date()
+                }
+            });
+        });
+    }
+
+    async markFailed(executionId, error) {
+        return await this.prisma.$transaction(async (tx) => {
+            return await tx.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'FAILED',
+                    error: error || {},
+                    completedAt: new Date()
+                }
+            });
+        });
+    }
+
+    async markBlocked(executionId, decision) {
+        return await this.prisma.$transaction(async (tx) => {
+            return await tx.agentExecution.update({
+                where: { id: executionId },
+                data: {
+                    status: 'BLOCKED',
+                    decision: decision || {},
+                    completedAt: new Date()
+                }
+            });
         });
     }
 }

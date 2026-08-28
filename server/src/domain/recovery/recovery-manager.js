@@ -19,10 +19,11 @@ export class RecoveryManager {
 
         return this.prisma.recoveryCase.create({
             data: {
+                type: 'PAYMENT_FAILURE',
                 paymentId,
                 correlationId,
                 status: 'OPEN',
-                paymentSnapshot: payment
+                contextSnapshot: payment
             }
         });
     }
@@ -63,7 +64,6 @@ export class RecoveryManager {
     }
 
     /**
-     * Processes eligible recovery cases after a downtime is resolved.
      * @param {string} downtimeId 
      */
     async processResolvedDowntime(downtimeId) {
@@ -73,7 +73,6 @@ export class RecoveryManager {
 
         if (!downtime || downtime.status !== 'RESOLVED') return;
 
-        // Find correlations with HIGH confidence that belong to this downtime
         const correlations = await this.prisma.paymentFailureCorrelation.findMany({
             where: {
                 downtimeId,
@@ -83,16 +82,13 @@ export class RecoveryManager {
         });
 
         for (const correlation of correlations) {
-            // Check if there is an existing recovery case
             const existingCase = await this.prisma.recoveryCase.findFirst({
                 where: { paymentId: correlation.paymentId }
             });
 
             if (!existingCase) {
-                // We queue eligible cases
                 await this.openRecoveryCase(correlation.paymentId, correlation.id);
             } else if (existingCase.status === 'WAITING') {
-                // If it was waiting for downtime to resolve, move to OPEN
                 await this.prisma.recoveryCase.update({
                     where: { id: existingCase.id },
                     data: { status: 'OPEN' }

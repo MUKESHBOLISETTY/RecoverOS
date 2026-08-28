@@ -173,19 +173,33 @@ model PaymentFailureCorrelation {
   @@index([correlatedAt])
 }
 
-// Recovery Models
 enum RecoveryCaseStatus {
   OPEN
+  ANALYZING
   WAITING
+  ACTION_REQUIRED
+  ESCALATED
   RECOVERED
   STOPPED
   FAILED
+  EXPIRED
+}
+
+enum RecoveryCaseType {
+  PAYMENT_FAILURE
+  CART_ABANDONMENT
+  SUBSCRIPTION_DUE
 }
 
 model RecoveryCase {
   id        String  @id @default(uuid()) @db.Uuid
-  paymentId String  @db.Uuid
-  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  type      RecoveryCaseType @default(PAYMENT_FAILURE)
+  
+  paymentId String?  @db.Uuid
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  cartId    String?  @db.Uuid
 
   correlationId String?                    @db.Uuid
   correlation   PaymentFailureCorrelation? @relation(fields: [correlationId], references: [id], onDelete: SetNull)
@@ -193,7 +207,7 @@ model RecoveryCase {
   status RecoveryCaseStatus @default(OPEN)
 
   // Snapshots for context
-  paymentSnapshot Json?
+  contextSnapshot Json?
   strategyApplied String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
@@ -215,9 +229,10 @@ model RecoveryAction {
   recoveryCaseId String       @db.Uuid
   recoveryCase   RecoveryCase @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
 
-  type    RecoveryActionType
-  status  String
-  payload Json?
+  type           RecoveryActionType
+  status         String
+  payload        Json?
+  idempotencyKey String?      @unique
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 }
@@ -374,11 +389,11 @@ model AgentExecution {
 
   userId String @db.Uuid
 
-  eventId   String? @db.Uuid
-  eventType String
+  triggerType      String   @default("PROVIDER_EVENT") // PROVIDER_EVENT | RECOVERY_SCHEDULE | SYSTEM_EVENT
+  triggerId        String?  @db.Uuid // internal DB ID
+  externalTriggerId String? // provider-assigned ID (Razorpay evt_xxx)
 
   provider String?
-  externalEventId String?
 
   status AgentExecutionStatus @default(QUEUED)
 
@@ -394,19 +409,19 @@ model AgentExecution {
 
   jobId String?
 
-  queuedAt DateTime @default(now()) @db.Timestamptz(3)
-  startedAt DateTime? @db.Timestamptz(3)
+  queuedAt    DateTime  @default(now()) @db.Timestamptz(3)
+  startedAt   DateTime? @db.Timestamptz(3)
   completedAt DateTime? @db.Timestamptz(3)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  @@unique([agentId, eventId])
+  @@unique([agentId, triggerType, triggerId])
   @@index([userId, status])
   @@index([agentId, status])
-  @@index([eventType])
+  @@index([triggerType])
   @@index([recoveryCaseId])
-  @@index([externalEventId])
+  @@index([externalTriggerId])
 }
 
 model AgentConnector {
@@ -421,4 +436,58 @@ model AgentConnector {
   @@id([agentId, connectorId])
   @@index([agentId])
   @@index([connectorId])
+}
+
+// Recovery Schedule
+enum RecoveryScheduleStatus {
+  SCHEDULED
+  FIRED
+  CANCELLED
+  FAILED
+}
+
+model RecoverySchedule {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  recoveryCaseId       String                 @db.Uuid
+  executeAt            DateTime               @db.Timestamptz(3)
+  reason               String?
+  status               RecoveryScheduleStatus @default(SCHEDULED)
+  jobId                String?
+  createdByExecutionId String?                @db.Uuid
+  triggeredExecutionId String?                @unique @db.Uuid
+
+  firedAt     DateTime? @db.Timestamptz(3)
+  cancelledAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([recoveryCaseId, status])
+  @@index([executeAt, status])
+  @@index([jobId])
+}
+
+// Transactional Outbox
+enum OutboxEventStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+model OutboxEvent {
+  id            String           @id @default(uuid()) @db.Uuid
+  eventType     String
+  aggregateType String
+  aggregateId   String
+  payload       Json
+  status        OutboxEventStatus @default(PENDING)
+  attempts      Int              @default(0)
+  publishedAt   DateTime?        @db.Timestamptz(3)
+  lastError     String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([aggregateType, aggregateId])
 }

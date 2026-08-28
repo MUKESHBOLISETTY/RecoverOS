@@ -1,15 +1,13 @@
 import { HumanMessage } from '@langchain/core/messages';
-import agentGraph from './graph.js';
 import { LoggerTracer } from './tracing/loggerTracer.js';
-import langsmithConfig from './tracing/langsmithConfig.js';
 import agentConfig from './agent-options.js';
 import BaseAgentService from '../../domain/agent/base-agent.service.js';
 
 export class LangchainAgentService extends BaseAgentService {
-    constructor() {
-        this.graph = agentGraph.getRunnable();
+    constructor(graph) {
+        super();
+        this.graph = graph.getRunnable ? graph.getRunnable() : graph;
         this.config = agentConfig;
-        this.langsmith = langsmithConfig;
     }
 
     /**
@@ -30,7 +28,10 @@ export class LangchainAgentService extends BaseAgentService {
 
         const initialState = {
             messages: [new HumanMessage(input)],
-            agentData: options.agentData || null
+            agentData: options.agentData || null,
+            executionId: options.executionId || null,
+            recoveryContext: options.recoveryContext || null,
+            activeConnections: options.activeConnections || []
         };
 
         const runnableConfig = {
@@ -51,8 +52,9 @@ export class LangchainAgentService extends BaseAgentService {
                 executionSummary: {
                     totalEvents: summary.totalEvents,
                     modelUsed: this.config.modelName,
-                    langsmithStatus: this.langsmith.getStatus()
-                }
+                    langsmithStatus: 'disabled'
+                },
+                decision: finalState.decision || null
             };
 
             tracer.logEvent('SERVICE_COMPLETE', 'LangchainAgentService.processMessage', {

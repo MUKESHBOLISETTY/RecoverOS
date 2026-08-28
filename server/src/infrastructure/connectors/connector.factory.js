@@ -1,4 +1,5 @@
 import RazorpayConnector from './razorpay-connector.js';
+import GmailConnector from './gmail-connector.js';
 
 class ConnectorFactory {
   constructor() {
@@ -6,6 +7,9 @@ class ConnectorFactory {
 
     const razorpay = new RazorpayConnector();
     this.connectors.set(razorpay.getMetadata().id, razorpay);
+
+    const gmail = new GmailConnector();
+    this.connectors.set(gmail.getMetadata().id, gmail);
   }
 
   /**

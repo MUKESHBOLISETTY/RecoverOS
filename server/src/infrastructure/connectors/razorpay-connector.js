@@ -7,6 +7,12 @@ class RazorpayConnector extends ConnectorInterface {
       id: 'razorpay',
       name: 'Razorpay',
       category: 'DATA_SOURCE',
+      capabilities: [
+        'payment.read',
+        'order.read',
+        'payment_link.create',
+        'payment.read_status'
+      ],
       fields: [
         { name: 'keyId', type: 'string', required: true, label: 'Key ID' },
         { name: 'keySecret', type: 'password', required: true, label: 'Key Secret' }

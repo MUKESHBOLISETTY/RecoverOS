@@ -28,6 +28,23 @@ export class PrismaAgentRepository extends AgentRepository {
             }
         });
     }
+
+    /**
+     * @param {string} id
+     * @returns {Promise<Object|null>}
+     */
+    async findById(id) {
+        return this.prisma.agent.findUnique({
+            where: { id },
+            include: {
+                connections: {
+                    include: {
+                        connector: true
+                    }
+                }
+            }
+        });
+    }
 }
 
 export default PrismaAgentRepository;

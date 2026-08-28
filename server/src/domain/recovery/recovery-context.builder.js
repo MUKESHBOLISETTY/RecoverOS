@@ -15,8 +15,11 @@ export class RecoveryContextBuilder {
      * @param {string} params.event.type
      * @param {string} [params.event.occurredAt]
      * @param {Object} params.payment
+     * @param {string} [params.provider]
      * @param {Object} [params.downtimeCorrelation]
      * @param {Object} [params.agent]
+     * @param {Object} [params.recoveryCase] - pre-created RecoveryCase
+     * @param {Array}  [params.previousRecoveryActions]
      * @param {Object} [params.customerHistory]
      * @param {Array<string>} [params.availableCapabilities]
      * @returns {Promise<Object>} RecoveryContext
@@ -28,6 +31,8 @@ export class RecoveryContextBuilder {
             provider,
             downtimeCorrelation,
             agent,
+            recoveryCase = null,
+            previousRecoveryActions = [],
             customerHistory = {},
             availableCapabilities = []
         } = params;
@@ -53,6 +58,13 @@ export class RecoveryContextBuilder {
             }
         }
 
+        const previousRecoveryAttempts = previousRecoveryActions.map(a => ({
+            action: a.type,
+            status: a.status,
+            payload: a.payload || null,
+            occurredAt: a.createdAt
+        }));
+
         return {
             event: {
                 id: event.id,
@@ -63,6 +75,12 @@ export class RecoveryContextBuilder {
             order,
             failure,
             downtimeCorrelation: downtimeCorrelation || null,
+            recoveryCase: recoveryCase ? {
+                id: recoveryCase.id,
+                status: recoveryCase.status,
+                strategyApplied: recoveryCase.strategyApplied || null
+            } : null,
+            previousRecoveryAttempts,
             customerHistory,
             agentPolicy,
             availableCapabilities

@@ -1,20 +1,22 @@
 import { PaymentMapper } from './payment-mapper.js';
 
-import { RazorpayPaymentRepository } from '../../infrastructure/razorpay/razorpay-payment.repository.js';
-
 export class ReconciliationService {
     /**
-     * @param {import('@prisma/client').PrismaClient} prisma
+     * @param {import('./payment.repository.js').PaymentRepository} paymentRepository
      * @param {import('../connectors/connector.manager.js').default} connectorManager
      * @param {import('../../infrastructure/cache/base-cache.service.js').BaseCacheService} [cacheService]
+     * @param {function(Object): Object} [razorpayRepoFactory]
+     * @param {import('../user/user.repository.js').UserRepository} [userRepository]
      */
-    constructor(prisma, connectorManager, cacheService = null) {
-        if (!prisma) throw new Error('ReconciliationService: prisma is required');
+    constructor(paymentRepository, connectorManager, cacheService = null, razorpayRepoFactory = null, userRepository = null) {
+        if (!paymentRepository) throw new Error('ReconciliationService: paymentRepository is required');
         if (!connectorManager) throw new Error('ReconciliationService: connectorManager is required');
 
-        this.prisma = prisma;
+        this.paymentRepository = paymentRepository;
         this.connectorManager = connectorManager;
         this.cacheService = cacheService;
+        this.razorpayRepoFactory = razorpayRepoFactory;
+        this.userRepository = userRepository;
 
         this.LOCK_KEY = 'reconciliation:lock';
         this.LOCK_TTL_SECS = 10 * 60;
@@ -55,7 +57,7 @@ export class ReconciliationService {
         );
 
         const connections = await this.connectorManager.getAllDecryptedCredentialsByConnectorId('razorpay');
-        
+
         if (connections.length === 0) {
             console.log('[ReconciliationService] No Razorpay connections found.');
             return { skipped: false, upserted: 0, missing: 0, windowHours };
@@ -66,7 +68,18 @@ export class ReconciliationService {
 
         for (const conn of connections) {
             try {
-                const razorpayRepo = new RazorpayPaymentRepository(conn.credentials);
+                if (this.userRepository) {
+                    const user = await this.userRepository.findById(conn.userId);
+                    if (!user) {
+                        console.log(`[ReconciliationService][Conn:${conn.id}] User ${conn.userId} does not exist — skipping.`);
+                        continue;
+                    }
+                }
+
+                if (!this.razorpayRepoFactory) {
+                    throw new Error('ReconciliationService: razorpayRepoFactory is not configured');
+                }
+                const razorpayRepo = this.razorpayRepoFactory(conn.credentials);
                 const res = await this._reconcileConnection(razorpayRepo, conn, fromUnix, toUnix);
                 totalUpserted += res.upserted;
                 totalMissing += res.missing;
@@ -125,10 +138,7 @@ export class ReconciliationService {
      * @returns {Promise<Set<string>>} Razorpay payment IDs
      */
     async _findMissingOrStale(razorpayPayments, razorpayIds) {
-        const local = await this.prisma.payment.findMany({
-            where: { razorpayPaymentId: { in: razorpayIds } },
-            select: { razorpayPaymentId: true, status: true },
-        });
+        const local = await this.paymentRepository.findManyByRazorpayIds(razorpayIds);
 
         const localMap = new Map(local.map(p => [p.razorpayPaymentId, p.status]));
 
@@ -148,17 +158,10 @@ export class ReconciliationService {
      * @param {object} conn
      */
     async _upsertBatch(entities, conn) {
-        await this.prisma.$transaction(
-            async (tx) => {
-                for (const entity of entities) {
-                    await tx.payment.upsert({
-                        where: { razorpayPaymentId: entity.id },
-                        create: PaymentMapper.toCreateInput(entity, { userId: conn.userId, connectionId: conn.id }),
-                        update: PaymentMapper.toUpdateInput(entity),
-                    });
-                }
-            },
-            { timeout: 30_000 }
+        await this.paymentRepository.upsertBatch(
+            entities,
+            (entity) => PaymentMapper.toCreateInput(entity, { userId: conn.userId, connectionId: conn.id }),
+            (entity) => PaymentMapper.toUpdateInput(entity)
         );
     }
 

@@ -34,23 +34,83 @@ import { ReconciliationQueue } from '../src/infrastructure/queue/reconciliation-
 import { ReconciliationWorker } from '../src/infrastructure/queue/reconciliation-worker.js';
 import { ReconciliationJob } from '../src/infrastructure/jobs/reconciliation.job.js';
 
+import { PrismaWebhookEventRepository } from '../src/infrastructure/db/webhook/prisma-webhook-event.repository.js';
+
 export const webhookService = new WebhookService([
     new PaymentWebhookHandler(),
     new PaymentDowntimeWebhookHandler()
 ]);
 export const idempotencyStore = new RedisIdempotencyStore(cacheService);
 export const webhookEventQueueService = new WebhookEventQueue();
-export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookService);
+
+const webhookEventRepository = new PrismaWebhookEventRepository(prisma);
+export const webhookEventWorkerService = new WebhookEventWorker(prisma, webhookEventRepository, webhookService);
 
 export let reconciliationQueue = null;
 export let reconciliationWorker = null;
 export let reconciliationJob = null;
 
 import { AgentExecutionQueue } from '../src/infrastructure/queue/agent-execution.queue.js';
+import { RecoveryScheduleQueue } from '../src/infrastructure/queue/recovery-schedule.queue.js';
 import { AgentExecutionWorker } from '../src/infrastructure/queue/agent-execution.worker.js';
+import { RecoveryScheduleWorker } from '../src/infrastructure/queue/recovery-schedule.worker.js';
+import { OutboxPublisher } from '../src/infrastructure/outbox/outbox.publisher.js';
+import { RecoveryCaseService } from '../src/domain/recovery/recovery-case.service.js';
+import { PrismaRecoveryCaseRepository } from '../src/infrastructure/db/recovery/prisma-recovery-case.repository.js';
+import { PrismaAgentExecutionRepository } from '../src/infrastructure/db/agent/prisma-agent-execution.repository.js';
+import { PrismaPaymentRepository } from '../src/infrastructure/db/payment/prisma-payment.repository.js';
+import { PrismaPaymentFailureCorrelationRepository } from '../src/infrastructure/db/correlation/prisma-payment-failure-correlation.repository.js';
+import { PrismaRecoveryActionRepository } from '../src/infrastructure/db/agent/prisma-recovery-action.repository.js';
+import { PrismaAgentRepository } from '../src/infrastructure/db/agent/prisma-agent.repository.js';
+import { PrismaRecoveryScheduleRepository } from '../src/infrastructure/db/schedule/prisma-recovery-schedule.repository.js';
+import { PrismaOutboxEventRepository } from '../src/infrastructure/db/outbox/prisma-outbox-event.repository.js';
 
 export const agentExecutionQueueService = new AgentExecutionQueue();
-export const agentExecutionWorkerService = new AgentExecutionWorker(prisma);
+export const recoveryScheduleQueueService = new RecoveryScheduleQueue();
+
+const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
+const paymentRepository = new PrismaPaymentRepository(prisma);
+const paymentFailureCorrelationRepository = new PrismaPaymentFailureCorrelationRepository(prisma);
+const recoveryActionRepository = new PrismaRecoveryActionRepository(prisma);
+const agentRepository = new PrismaAgentRepository(prisma);
+
+const recoveryCaseRepo = new PrismaRecoveryCaseRepository(prisma);
+const recoveryCaseService = new RecoveryCaseService(recoveryCaseRepo);
+
+const contextBuilderFactory = async (credentials) => {
+    const { RazorpayOrderRepository } = await import('../src/infrastructure/razorpay/razorpay-order.repository.js');
+    const { OrderContextService } = await import('../src/domain/recovery/order-context.service.js');
+    const { FailureDiagnosisService } = await import('../src/domain/recovery/failure-diagnosis.service.js');
+    const { RecoveryContextBuilder } = await import('../src/domain/recovery/recovery-context.builder.js');
+    
+    const orderRepository = new RazorpayOrderRepository(credentials);
+    const orderContextService = new OrderContextService(orderRepository, cacheService);
+    const failureDiagnosisService = new FailureDiagnosisService();
+    return new RecoveryContextBuilder(failureDiagnosisService, orderContextService);
+};
+
+export const agentExecutionWorkerService = new AgentExecutionWorker(
+    agentExecutionRepository,
+    paymentRepository,
+    paymentFailureCorrelationRepository,
+    recoveryActionRepository,
+    agentRepository,
+    recoveryCaseService,
+    contextBuilderFactory
+);
+
+const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
+
+export const recoveryScheduleWorkerService = new RecoveryScheduleWorker(
+    recoveryScheduleRepository,
+    recoveryCaseRepo,
+    agentExecutionRepository,
+    recoveryCaseService,
+    agentExecutionQueueService
+);
+
+const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
+export const outboxPublisher = new OutboxPublisher(outboxEventRepository, recoveryScheduleQueueService);
 
 
 export async function connectRedis() {
@@ -72,11 +132,16 @@ export async function connectRedis() {
             await emailWorkerService.start();
             await webhookEventWorkerService.start();
             await agentExecutionWorkerService.start();
+            await recoveryScheduleWorkerService.start();
+            outboxPublisher.start();
 
             if (!reconciliationQueue) {
                 try {
                     const { connectorManager } = await import('./connectors.config.js');
-                    const reconciliationSvc = new ReconciliationService(prisma, connectorManager, cacheService);
+                    const { PrismaUserRepository } = await import('../src/infrastructure/db/user/prisma-user.repository.js');
+                    const userRepository = new PrismaUserRepository(prisma);
+                    const razorpayRepoFactory = (credentials) => new RazorpayPaymentRepository(credentials);
+                    const reconciliationSvc = new ReconciliationService(paymentRepository, connectorManager, cacheService, razorpayRepoFactory, userRepository);
                     reconciliationQueue = new ReconciliationQueue();
                     reconciliationWorker = new ReconciliationWorker(reconciliationSvc);
                     reconciliationJob = new ReconciliationJob(reconciliationQueue);
@@ -108,8 +173,11 @@ export async function disconnectRedis() {
         if (reconciliationWorker) await reconciliationWorker.close();
         if (reconciliationQueue) await reconciliationQueue.close();
 
+        await outboxPublisher.stop();
+        await recoveryScheduleWorkerService.close();
         await webhookEventWorkerService.close();
         await webhookEventQueueService.close();
+        await recoveryScheduleQueueService.close();
         await agentExecutionWorkerService.close();
         await agentExecutionQueueService.close();
         await emailWorkerService.close();
@@ -151,6 +219,8 @@ export default {
     webhookService: webhookService,
     agentExecutionQueue: agentExecutionQueueService,
     agentExecutionWorker: agentExecutionWorkerService,
+    recoveryScheduleQueue: recoveryScheduleQueueService,
+    recoveryScheduleWorker: recoveryScheduleWorkerService,
     reconciliationQueue,
     reconciliationWorker,
     reconciliationJob,

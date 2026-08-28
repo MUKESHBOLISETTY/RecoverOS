@@ -25,7 +25,7 @@ export class AgentConfig {
 
     getPrimaryLLMConfig() {
         return {
-            openAIApiKey: this.fireworksApiKey,
+            apiKey: this.fireworksApiKey,
             configuration: {
                 baseURL: 'https://api.fireworks.ai/inference/v1',
             },

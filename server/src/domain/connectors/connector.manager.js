@@ -187,7 +187,12 @@ class ConnectorManager {
     const connector = this.connectorFactory.getConnector(record.connectorId);
     if (!connector) return [];
 
-    const capabilities = await connector.getDynamicCapabilities(credentials);
+    const metadata = connector.getMetadata();
+    const staticCaps = metadata.capabilities || [];
+    
+    const dynamicCaps = await connector.getDynamicCapabilities(credentials);
+
+    const capabilities = [...new Set([...staticCaps, ...dynamicCaps])];
 
     if (this.cacheService) {
       const cacheKey = `connector_capabilities:${connectionId}`;

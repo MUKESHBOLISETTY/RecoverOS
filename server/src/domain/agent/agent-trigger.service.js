@@ -49,13 +49,13 @@ export class AgentTriggerService {
             for (const agent of activeAgents) {
                 if (agent.triggers && agent.triggers.includes(eventType)) {
 
-                    const isCapable = await this._validateAgentCapabilities(agent);
+                    const validation = await this._validateAgentCapabilities(agent);
 
-                    if (isCapable) {
+                    if (validation.isCapable) {
                         console.log(`[AgentTriggerService] Agent ${agent.id} (${agent.name}) matched trigger ${eventType} and passed capability validation.`);
                         triggeredAgents.push(agent);
                     } else {
-                        console.warn(`[AgentTriggerService] Agent ${agent.id} (${agent.name}) matched trigger ${eventType} but FAILED capability validation.`);
+                        console.warn(`[AgentTriggerService] Agent ${agent.id} (${agent.name}) matched trigger ${eventType} but FAILED capability validation. Missing capabilities: ${validation.missing.join(', ')}`);
                     }
                 }
             }
@@ -70,11 +70,11 @@ export class AgentTriggerService {
 
     /**
      * @param {Object} agent 
-     * @returns {Promise<boolean>}
+     * @returns {Promise<{isCapable: boolean, missing: string[]}>}
      */
     async _validateAgentCapabilities(agent) {
         const required = agent.requiredCapabilities || [];
-        if (required.length === 0) return true;
+        if (required.length === 0) return { isCapable: true, missing: [] };
 
         const agentConnections = agent.connections || [];
         const availableCapabilities = new Set();
@@ -83,7 +83,6 @@ export class AgentTriggerService {
             if (conn.connector) {
                 availableCapabilities.add(conn.connector.category.toLowerCase());
                 availableCapabilities.add(conn.connector.connectorId.toLowerCase());
-
                 if (this.connectorManager && conn.connectorId) {
                     try {
                         const dynamicCaps = await this.connectorManager.getConnectorCapabilities(conn.connectorId);
@@ -97,14 +96,15 @@ export class AgentTriggerService {
             }
         }
 
+        const missing = [];
         for (const req of required) {
             const reqLower = req.toLowerCase();
             if (!availableCapabilities.has(reqLower)) {
-                return false;
+                missing.push(req);
             }
         }
 
-        return true;
+        return { isCapable: missing.length === 0, missing };
     }
 
     /**

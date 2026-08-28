@@ -6,6 +6,7 @@ import ConnectorFactory from '../src/infrastructure/connectors/connector.factory
 import ConnectorManager from '../src/domain/connectors/connector.manager.js';
 import ConnectorsController from '../src/controllers/connectors.controller.js';
 import createConnectorsRouter from '../src/routes/connectors.routes.js';
+import GoogleOAuthService from '../src/infrastructure/connectors/google-oauth.service.js';
 
 const credentialRepo = new PrismaConnectorCredentialRepository(prisma);
 const encryptionService = new CredentialEncryptionService(process.env.ENCRYPTION_KEY);
@@ -17,7 +18,9 @@ const connectorManager = new ConnectorManager({
     cacheService
 });
 
-const connectorsController = new ConnectorsController(connectorManager);
+const googleOAuthService = new GoogleOAuthService({ connectorManager, cacheService });
+
+const connectorsController = new ConnectorsController(connectorManager, googleOAuthService);
 const connectorsRouter = createConnectorsRouter(connectorsController);
 
 export { connectorsRouter, connectorManager, connectorsController };

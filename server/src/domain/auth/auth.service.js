@@ -1,12 +1,21 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaUserRepository } from '../../infrastructure/db/user/prisma-user.repository.js';
-import { PrismaDeviceSessionRepository } from '../../infrastructure/db/user/prisma-device-session.repository.js';
+
+/**
+ * @typedef {import('../user/user.repository.js').UserRepository} UserRepository
+ * @typedef {import('../user/device-session.repository.js').DeviceSessionRepository} DeviceSessionRepository
+ */
 
 export class AuthService {
-    constructor() {
-        this.userRepository = new PrismaUserRepository();
-        this.deviceSessionRepository = new PrismaDeviceSessionRepository();
+    /**
+     * @param {UserRepository} userRepository
+     * @param {DeviceSessionRepository} deviceSessionRepository
+     */
+    constructor(userRepository, deviceSessionRepository) {
+        if (!userRepository) throw new Error('AuthService: userRepository is required');
+        if (!deviceSessionRepository) throw new Error('AuthService: deviceSessionRepository is required');
+        this.userRepository = userRepository;
+        this.deviceSessionRepository = deviceSessionRepository;
         this.jwtSecret = process.env.JWT_SECRET;
         this.sessionPrefix = 'session:';
     }

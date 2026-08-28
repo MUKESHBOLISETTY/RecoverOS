@@ -9,7 +9,7 @@ import { connectorsRouter, connectorManager } from '../config/connectors.config.
 import { connectDB } from '../config/database.config.js';
 import { connectRedis, idempotencyStore, webhookEventQueueService } from '../config/redis.config.js';
 import { WebhookController } from './controllers/webhook.controller.js';
-import { AuthController } from './controllers/auth.controller.js';
+import { authController } from '../config/auth.config.js';
 
 const app = express();
 connectDB();
@@ -30,7 +30,7 @@ app.set('trust proxy', 1);
 
 const webhookController = new WebhookController(idempotencyStore, webhookEventQueueService, connectorManager);
 const webhookRoutes = createWebhookRouter(webhookController);
-const authRoutes = createAuthRouter(AuthController);
+const authRoutes = createAuthRouter(authController);
 
 app.use('/webhooks', webhookRoutes);
 app.use('/auth', authRoutes);
