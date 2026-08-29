@@ -59,26 +59,36 @@ export class TriggerContextResolver {
                 throw new Error(`[TriggerContextResolver] paymentId missing from inputContext for event ${triggerType}`);
             }
 
-            const skillId = this.skillSelector.selectForTrigger({ eventType: triggerType, agentData: agentConfig });
-            let activeSkillId = null;
-            let activeSkillVersion = null;
-
-            if (skillId) {
-                const skill = await this.skillRegistry.getSkill(skillId);
-                if (skill) {
-                    activeSkillId = skill.id;
-                    activeSkillVersion = skill.version;
+            const recoveryCaseId = inputContext?.recoveryCaseId;
+            if (recoveryCaseId) {
+                const caseRecord = await this.recoveryCaseService.getCaseById(recoveryCaseId);
+                if (!caseRecord) {
+                    throw new Error(`[TriggerContextResolver] Provided recoveryCaseId ${recoveryCaseId} not found.`);
                 }
-            }
 
-            recoveryCase = await this.recoveryCaseService.getOrCreateCase({
-                type: 'PAYMENT_FAILURE',
-                identity: { paymentId },
-                subjectType: 'PAYMENT',
-                subjectId: paymentId,
-                activeSkillId,
-                activeSkillVersion
-            });
+                recoveryCase = caseRecord;
+            } else {
+                const skillId = this.skillSelector.selectForTrigger({ eventType: triggerType, agentData: agentConfig });
+                let activeSkillId = null;
+                let activeSkillVersion = null;
+
+                if (skillId) {
+                    const skill = await this.skillRegistry.getSkill(skillId);
+                    if (skill) {
+                        activeSkillId = skill.id;
+                        activeSkillVersion = skill.version;
+                    }
+                }
+
+                recoveryCase = await this.recoveryCaseService.getOrCreateCase({
+                    type: 'PAYMENT_FAILURE',
+                    identity: { paymentId },
+                    subjectType: 'PAYMENT',
+                    subjectId: paymentId,
+                    activeSkillId,
+                    activeSkillVersion
+                });
+            }
         } else {
             throw new Error(`[TriggerContextResolver] Unsupported triggerType: ${triggerType}`);
         }

@@ -63,6 +63,14 @@ export class RecoveryCaseService {
      * @param {string} caseId
      * @returns {Promise<Object>}
      */
+    async getCaseById(caseId) {
+        return this.recoveryCaseRepository.findById(caseId);
+    }
+
+    /**
+     * @param {string} caseId
+     * @returns {Promise<Object>}
+     */
     async markAnalyzing(caseId) {
         return this.recoveryCaseRepository.update(caseId, { status: 'ANALYZING' });
     }

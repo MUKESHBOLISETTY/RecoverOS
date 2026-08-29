@@ -33,7 +33,7 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
 
         const idempotencyKey = `payment_link_create:${caseId}:${executionId}`;
         const existingAction = await this.recoveryActionRepository.findByIdempotencyKey(idempotencyKey);
-        
+
         if (existingAction) {
             console.log('[RazorpayLinkExecutor] Action already completed. Returning existing link.');
             return existingAction.payload;
@@ -41,7 +41,7 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
 
         console.log(`[CredentialResolver] Resolving credentials for connectorId: ${activeConnection.connectorId}, provider: razorpay`);
         const credentials = await this.connectorManager.getDecryptedCredentialsById(activeConnection.connectorId);
-        
+
         const keyId = credentials?.keyId || credentials?.key_id;
         const keySecret = credentials?.keySecret || credentials?.key_secret;
 
@@ -76,6 +76,20 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
             amount = Math.floor(amount * discountMultiplier);
         }
 
+        const notes = {
+            recoveryContext: recoveryContext.diagnosisCode || 'UNKNOWN',
+            discountApplied: parameters.discountPercent ? `${parameters.discountPercent}%` : '0%',
+            recoveryCaseId: caseId,
+            subjectType: recoveryContext.recoveryCase?.subjectType || 'UNKNOWN',
+            subjectId: recoveryContext.recoveryCase?.subjectId || 'UNKNOWN'
+        };
+
+        if (recoveryContext.paymentSnapshot?.notes) {
+            const originalNotes = recoveryContext.paymentSnapshot.notes;
+            if (originalNotes.gid) notes.gid = originalNotes.gid;
+            if (originalNotes.shopify_order_id) notes.shopify_order_id = originalNotes.shopify_order_id;
+        }
+
         const payload = {
             amount: amount,
             currency: parameters.currency || 'INR',
@@ -91,10 +105,7 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
                 email: true
             },
             reminder_enable: true,
-            notes: {
-                recoveryContext: recoveryContext.diagnosisCode || 'UNKNOWN',
-                discountApplied: parameters.discountPercent ? `${parameters.discountPercent}%` : '0%'
-            }
+            notes: notes
         };
 
         try {

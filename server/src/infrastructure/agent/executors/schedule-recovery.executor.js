@@ -56,6 +56,17 @@ export class ScheduleRecoveryExecutor extends ToolExecutorInterface {
             executeAt
         );
 
+        if (result.status === 'ALREADY_SCHEDULED') {
+            return {
+                status: 'ALREADY_SCHEDULED',
+                caseId: result.updatedCase.id,
+                scheduleId: result.schedule?.id,
+                delayMinutes,
+                executeAt: result.schedule?.executeAt?.toISOString(),
+                message: `An active schedule already exists for this case.`
+            };
+        }
+
         if (this.cacheService) {
             await this.cacheService.set(
                 `recovery_case_status:${caseId}`,

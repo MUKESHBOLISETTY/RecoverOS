@@ -94,106 +94,139 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
     }
 
     async scheduleRecovery(caseId, executionId, reason, delayMinutes, executeAt) {
-        return await this.prisma.$transaction(async (tx) => {
-            const updatedCase = await tx.recoveryCase.update({
-                where: { id: caseId },
-                data: { status: 'WAITING' }
-            });
+        try {
+            return await this.prisma.$transaction(async (tx) => {
+                const updatedCase = await tx.recoveryCase.update({
+                    where: { id: caseId },
+                    data: { status: 'WAITING' }
+                });
 
-            await tx.recoverySchedule.updateMany({
-                where: {
-                    recoveryCaseId: caseId,
-                    status: 'SCHEDULED'
-                },
-                data: {
-                    status: 'CANCELLED',
-                    cancelledAt: new Date()
-                }
-            });
-
-            const schedule = await tx.recoverySchedule.create({
-                data: {
-                    recoveryCaseId: caseId,
-                    executeAt,
-                    reason,
-                    status: 'SCHEDULED',
-                    createdByExecutionId: executionId,
-                }
-            });
-
-            const outboxEvent = await tx.outboxEvent.create({
-                data: {
-                    eventType: 'RECOVERY_SCHEDULE_CREATED',
-                    aggregateType: 'RecoverySchedule',
-                    aggregateId: schedule.id,
-                    payload: {
-                        scheduleId: schedule.id,
-                        caseId,
-                        executeAt: executeAt.toISOString(),
-                        delayMinutes,
-                        reason
+                await tx.recoverySchedule.updateMany({
+                    where: {
+                        recoveryCaseId: caseId,
+                        status: 'SCHEDULED'
                     },
-                    status: 'PENDING',
-                }
-            });
+                    data: {
+                        status: 'CANCELLED',
+                        cancelledAt: new Date()
+                    }
+                });
 
-            await tx.recoveryAction.create({
-                data: {
-                    recoveryCaseId: caseId,
-                    type: 'IN_APP',
-                    status: 'SCHEDULED',
-                    payload: { reason, delayMinutes, scheduleId: schedule.id },
-                    idempotencyKey: `schedule:${caseId}:${executionId}`,
-                }
-            });
+                const schedule = await tx.recoverySchedule.create({
+                    data: {
+                        recoveryCaseId: caseId,
+                        executeAt,
+                        reason,
+                        status: 'SCHEDULED',
+                        createdByExecutionId: executionId,
+                    }
+                });
 
-            await tx.auditEvent.create({
-                data: {
-                    entityId: caseId,
-                    entityType: 'RecoveryCase',
-                    action: 'WAITING',
-                    newValue: { status: 'WAITING', scheduleId: schedule.id, reason },
-                    actor: `agent-execution:${executionId}`,
-                }
-            });
+                const outboxEvent = await tx.outboxEvent.create({
+                    data: {
+                        eventType: 'RECOVERY_SCHEDULE_CREATED',
+                        aggregateType: 'RecoverySchedule',
+                        aggregateId: schedule.id,
+                        payload: {
+                            scheduleId: schedule.id,
+                            caseId,
+                            executeAt: executeAt.toISOString(),
+                            delayMinutes,
+                            reason
+                        },
+                        status: 'PENDING',
+                    }
+                });
 
-            return { updatedCase, schedule, outboxEvent };
-        });
+                await tx.recoveryAction.create({
+                    data: {
+                        recoveryCaseId: caseId,
+                        type: 'IN_APP',
+                        status: 'SCHEDULED',
+                        payload: { reason, delayMinutes, scheduleId: schedule.id },
+                        idempotencyKey: `schedule:${caseId}:${executionId}`,
+                    }
+                });
+
+                await tx.auditEvent.create({
+                    data: {
+                        entityId: caseId,
+                        entityType: 'RecoveryCase',
+                        action: 'WAITING',
+                        newValue: { status: 'WAITING', scheduleId: schedule.id, reason },
+                        actor: `agent-execution:${executionId}`,
+                    }
+                });
+
+                return { updatedCase, schedule, outboxEvent };
+            });
+        } catch (error) {
+            if (error.code === 'P2002') {
+                const existingSchedule = await this.prisma.recoverySchedule.findFirst({
+                    where: { recoveryCaseId: caseId, status: 'SCHEDULED' }
+                });
+                return {
+                    status: 'ALREADY_SCHEDULED',
+                    schedule: existingSchedule,
+                    updatedCase: { id: caseId }
+                };
+            }
+            throw error;
+        }
     }
 
-    async closeCase(payment, entity, externalEventId) {
-        const openCases = await this.prisma.recoveryCase.findMany({
-            where: {
-                paymentId: payment.id,
-                status: { in: ['OPEN', 'ANALYZING', 'WAITING', 'ACTION_REQUIRED', 'ESCALATED'] }
-            }
+    async markRecovered({ recoveryCaseId, subjectType, subjectId, verifiedOutcome, sourceEvent, sourceEventId }) {
+        const whereClause = { status: { in: ['OPEN', 'ANALYZING', 'WAITING', 'ACTION_REQUIRED', 'ESCALATED'] } };
+
+        if (recoveryCaseId) {
+            whereClause.id = recoveryCaseId;
+        } else if (subjectType && subjectId) {
+            whereClause.OR = [
+                { subjectType, subjectId },
+                // TEMPORARY
+                { paymentId: subjectId }
+            ];
+        } else {
+            return [];
+        }
+
+        const eligibleCases = await this.prisma.recoveryCase.findMany({
+            where: whereClause,
+            select: { id: true, paymentId: true }
         });
 
-        if (openCases.length === 0) return openCases;
+        if (eligibleCases.length === 0) return [];
 
-        for (const recoveryCase of openCases) {
-            await this.prisma.$transaction(async (tx) => {
+        const recoveredCases = [];
+
+        for (const { id: caseId, paymentId } of eligibleCases) {
+            const result = await this.prisma.$transaction(async (tx) => {
+                const updateResult = await tx.recoveryCase.updateMany({
+                    where: {
+                        id: caseId,
+                        status: { in: ['OPEN', 'ANALYZING', 'WAITING', 'ACTION_REQUIRED', 'ESCALATED'] }
+                    },
+                    data: { status: 'RECOVERED' }
+                });
+
+                if (updateResult.count === 0) {
+                    return null;
+                }
+
                 await tx.outcome.upsert({
-                    where: { recoveryCaseId: recoveryCase.id },
+                    where: { recoveryCaseId: caseId },
                     create: {
-                        recoveryCaseId: recoveryCase.id,
+                        recoveryCaseId: caseId,
                         successful: true,
-                        amountRecovered: payment.amount,
-                        notes: `Recovered via ${entity.id} (event: payment.captured)`
+                        amountRecovered: verifiedOutcome.amountRecovered,
+                        notes: verifiedOutcome.notes
                     },
                     update: {}
                 });
 
-                if (recoveryCase.status !== 'RECOVERED') {
-                    await tx.recoveryCase.update({
-                        where: { id: recoveryCase.id },
-                        data: { status: 'RECOVERED' }
-                    });
-                }
-
-                await tx.recoverySchedule.updateMany({
+                const schedulesCancelled = await tx.recoverySchedule.updateMany({
                     where: {
-                        recoveryCaseId: recoveryCase.id,
+                        recoveryCaseId: caseId,
                         status: 'SCHEDULED'
                     },
                     data: {
@@ -204,17 +237,27 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
 
                 await tx.auditEvent.create({
                     data: {
-                        entityId: recoveryCase.id,
+                        entityId: caseId,
                         entityType: 'RecoveryCase',
                         action: 'RECOVERED',
-                        newValue: { status: 'RECOVERED', razorpayPaymentId: entity.id },
-                        actor: `webhook:${externalEventId || 'unknown'}`
+                        newValue: {
+                            status: 'RECOVERED',
+                            sourceEvent,
+                            sourceEventId
+                        },
+                        actor: `system:${sourceEvent}`
                     }
                 });
+
+                return { id: caseId, schedulesCancelled: schedulesCancelled.count };
             });
+
+            if (result) {
+                recoveredCases.push(result);
+            }
         }
 
-        return openCases;
+        return recoveredCases;
     }
 }
 

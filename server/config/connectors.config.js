@@ -1,5 +1,5 @@
 import { prisma } from './database.config.js';
-import { cacheService } from './redis.config.js';
+
 import PrismaConnectorCredentialRepository from '../src/infrastructure/db/connectors/prisma-connector-credential.repository.js';
 import CredentialEncryptionService from '../src/domain/connectors/credential-encryption.service.js';
 import ConnectorFactory from '../src/infrastructure/connectors/connector.factory.js';
@@ -15,10 +15,26 @@ const connectorManager = new ConnectorManager({
     connectorFactory,
     encryptionService,
     credentialRepository: credentialRepo,
-    cacheService
+    cacheService: new Proxy({}, {
+        get: (target, prop) => {
+            return async (...args) => {
+                const { cacheService: lazyCache } = await import('./redis.config.js');
+                return lazyCache[prop](...args);
+            };
+        }
+    })
 });
 
-const googleOAuthService = new GoogleOAuthService({ connectorManager, cacheService });
+const googleOAuthService = new GoogleOAuthService({
+    connectorManager, cacheService: new Proxy({}, {
+        get: (target, prop) => {
+            return async (...args) => {
+                const { cacheService: lazyCache } = await import('./redis.config.js');
+                return lazyCache[prop](...args);
+            };
+        }
+    })
+});
 
 const connectorsController = new ConnectorsController(connectorManager, googleOAuthService);
 const connectorsRouter = createConnectorsRouter(connectorsController);
