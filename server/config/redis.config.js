@@ -77,31 +77,46 @@ const agentRepository = new PrismaAgentRepository(prisma);
 const recoveryCaseRepo = new PrismaRecoveryCaseRepository(prisma);
 const recoveryCaseService = new RecoveryCaseService(recoveryCaseRepo);
 
-const contextBuilderFactory = async (credentials) => {
+const subjectContextRegistryFactory = async (credentials) => {
+    const { SubjectContextRegistry } = await import('../src/domain/recovery/context-providers/subject-context.registry.js');
+    const { PaymentContextProvider } = await import('../src/domain/recovery/context-providers/payment-context.provider.js');
+    
     const { RazorpayOrderRepository } = await import('../src/infrastructure/razorpay/razorpay-order.repository.js');
     const { OrderContextService } = await import('../src/domain/recovery/order-context.service.js');
     const { FailureDiagnosisService } = await import('../src/domain/recovery/failure-diagnosis.service.js');
-    const { RecoveryContextBuilder } = await import('../src/domain/recovery/recovery-context.builder.js');
     
     const orderRepository = new RazorpayOrderRepository(credentials);
     const orderContextService = new OrderContextService(orderRepository, cacheService);
     const failureDiagnosisService = new FailureDiagnosisService();
-    return new RecoveryContextBuilder(failureDiagnosisService, orderContextService);
-};
 
-    const { TriggerContextResolver } = await import('../src/domain/agent/execution/trigger-context.resolver.js');
-    const triggerContextResolver = new TriggerContextResolver(
+    const paymentContextProvider = new PaymentContextProvider(
         paymentRepository,
         paymentFailureCorrelationRepository,
         recoveryActionRepository,
+        failureDiagnosisService,
+        orderContextService
+    );
+
+    const registry = new SubjectContextRegistry();
+    registry.register('PAYMENT', paymentContextProvider);
+    return registry;
+};
+
+    const { TriggerContextResolver } = await import('../src/domain/agent/execution/trigger-context.resolver.js');
+    const { skillSelector, skillRegistry } = await import('./skills.config.js');
+    const triggerContextResolver = new TriggerContextResolver(
         recoveryCaseService,
-        contextBuilderFactory
+        subjectContextRegistryFactory,
+        skillSelector,
+        skillRegistry
     );
 
     export const agentExecutionWorkerService = new AgentExecutionWorker(
         agentExecutionRepository,
         agentRepository,
-        triggerContextResolver
+        triggerContextResolver,
+        recoveryCaseRepo,
+        paymentRepository
     );
 
 const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);

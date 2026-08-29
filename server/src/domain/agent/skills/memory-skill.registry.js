@@ -4,10 +4,10 @@ import Skill from './skill.js';
 export class MemorySkillRegistry extends SkillRegistryInterface {
     constructor() {
         super();
-        
+
         /** @type {Map<string, Skill>} */
         this.skills = new Map();
-        
+
         this._initializeDefaultSkills();
     }
 
@@ -71,15 +71,21 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
             ]
         });
 
-        this.skills.set(recoveryReEvaluation.id, recoveryReEvaluation);
     }
 
     /**
      * @param {string} skillId
+     * @param {number} [version]
      * @returns {Promise<Skill|null>}
      */
-    async getSkill(skillId) {
-        return this.skills.get(skillId) || null;
+    async getSkill(skillId, version = null) {
+        const skill = this.skills.get(skillId);
+        if (!skill) return null;
+        if (version !== null && skill.version !== version) {
+            console.warn(`[MemorySkillRegistry] Skill ${skillId} version mismatch. Requested: ${version}, Available: ${skill.version}`);
+            return null;
+        }
+        return skill;
     }
 
     /**

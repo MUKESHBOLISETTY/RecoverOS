@@ -5,17 +5,23 @@ export class AgentExecutionWorker extends BaseWorkerService {
      * @param {import('../db/agent/prisma-agent-execution.repository.js').PrismaAgentExecutionRepository} agentExecutionRepository
      * @param {import('../db/agent/prisma-agent.repository.js').PrismaAgentRepository} agentRepository
      * @param {import('../../domain/agent/execution/trigger-context.resolver.js').TriggerContextResolver} triggerContextResolver
+     * @param {import('../db/recovery/prisma-recovery-case.repository.js').PrismaRecoveryCaseRepository} recoveryCaseRepository
+     * @param {import('../razorpay/razorpay-payment.repository.js').RazorpayPaymentRepository} paymentRepository
      */
     constructor(
         agentExecutionRepository,
         agentRepository,
-        triggerContextResolver
+        triggerContextResolver,
+        recoveryCaseRepository,
+        paymentRepository
     ) {
         super('agent-execution');
         if (!agentExecutionRepository) throw new Error('AgentExecutionWorker: agentExecutionRepository is required');
         this.agentExecutionRepository = agentExecutionRepository;
         this.agentRepository = agentRepository;
         this.triggerContextResolver = triggerContextResolver;
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.paymentRepository = paymentRepository;
     }
 
     /**
@@ -55,14 +61,30 @@ export class AgentExecutionWorker extends BaseWorkerService {
 
         let credentials = {};
         const { connectorManager } = await import('../../../config/connectors.config.js');
-        if (execution.inputContext?.paymentId || execution.inputContext?.subject?.id) {
-            const paymentId = execution.inputContext.paymentId || execution.inputContext.subject.id;
-            const { prisma } = await import('../../../config/database.config.js');
-            const payment = await prisma.payment.findUnique({ where: { id: paymentId } }) || 
-                            await prisma.payment.findUnique({ where: { razorpayPaymentId: paymentId }});
-            if (payment?.connectionId) {
-                credentials = await connectorManager.getDecryptedCredentialsById(payment.connectionId) || {};
+
+        let connectionId = null;
+
+        if (execution.triggerType === 'recovery.schedule' && (execution.recoveryCaseId || execution.inputContext?.recoveryCaseId)) {
+            const caseId = execution.recoveryCaseId || execution.inputContext.recoveryCaseId;
+            const recoveryCase = await this.recoveryCaseRepository.findById(caseId);
+            if (recoveryCase && recoveryCase.subjectType === 'PAYMENT') {
+                const payment = await this.paymentRepository.findById(recoveryCase.subjectId) || 
+                                await this.paymentRepository.findByRazorpayId(recoveryCase.subjectId);
+                if (payment?.connectionId) {
+                    connectionId = payment.connectionId;
+                }
             }
+        } else if (execution.inputContext?.paymentId || execution.inputContext?.subject?.id) {
+            const paymentId = execution.inputContext.paymentId || execution.inputContext.subject.id;
+            const payment = await this.paymentRepository.findById(paymentId) || 
+                            await this.paymentRepository.findByRazorpayId(paymentId);
+            if (payment?.connectionId) {
+                connectionId = payment.connectionId;
+            }
+        }
+
+        if (connectionId) {
+            credentials = await connectorManager.getDecryptedCredentialsById(connectionId) || {};
         }
 
         const allCapabilities = new Set();

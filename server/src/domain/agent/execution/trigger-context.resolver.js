@@ -13,18 +13,22 @@ export class TriggerContextResolver {
      * @param {RecoveryCaseService} recoveryCaseService
      * @param {Function} contextBuilderFactory
      */
+    /**
+     * @param {import('../../recovery/recovery-case.service.js').RecoveryCaseService} recoveryCaseService
+     * @param {Function} subjectContextRegistryFactory
+     * @param {import('../skills/skill-selector.js').default} skillSelector
+     * @param {import('../skills/skill-registry.interface.js').default} skillRegistry
+     */
     constructor(
-        paymentRepository,
-        paymentFailureCorrelationRepository,
-        recoveryActionRepository,
         recoveryCaseService,
-        contextBuilderFactory
+        subjectContextRegistryFactory,
+        skillSelector,
+        skillRegistry
     ) {
-        this.paymentRepository = paymentRepository;
-        this.paymentFailureCorrelationRepository = paymentFailureCorrelationRepository;
-        this.recoveryActionRepository = recoveryActionRepository;
         this.recoveryCaseService = recoveryCaseService;
-        this.contextBuilderFactory = contextBuilderFactory;
+        this.subjectContextRegistryFactory = subjectContextRegistryFactory;
+        this.skillSelector = skillSelector;
+        this.skillRegistry = skillRegistry;
     }
 
     /**
@@ -35,53 +39,65 @@ export class TriggerContextResolver {
      * @returns {Promise<Object>} fullContext
      */
     async resolveContext(execution, agentConfig, availableCapabilities, credentials) {
-        const { triggerType, triggerId, inputContext, provider } = execution;
+        const { triggerType, triggerId, inputContext } = execution;
         const executionId = execution.id;
 
-        // Determine if it's a payment-related event
-        if (triggerType.startsWith('payment.') || triggerType === 'recovery.schedule') {
-            console.log(`[TriggerContext] triggerType: ${triggerType}, subjectType: payment, subjectId: ${inputContext?.paymentId || inputContext?.subject?.id}`);
+        let recoveryCase;
+
+        if (triggerType === 'recovery.schedule') {
+            const recoveryCaseId = execution.recoveryCaseId || inputContext?.recoveryCaseId;
+            if (!recoveryCaseId) {
+                throw new Error(`[TriggerContextResolver] recoveryCaseId missing for scheduled execution ${executionId}`);
+            }
+            recoveryCase = await this.recoveryCaseService.getCaseById(recoveryCaseId);
+            if (!recoveryCase) {
+                throw new Error(`[TriggerContextResolver] RecoveryCase ${recoveryCaseId} not found`);
+            }
+        } else if (triggerType.startsWith('payment.')) {
             const paymentId = inputContext?.paymentId || inputContext?.subject?.id;
             if (!paymentId) {
                 throw new Error(`[TriggerContextResolver] paymentId missing from inputContext for event ${triggerType}`);
             }
 
-            const payment = await this.paymentRepository.findByRazorpayId(paymentId) || await this.paymentRepository.findById(paymentId);
-            if (!payment) throw new Error(`[TriggerContextResolver] Payment ${paymentId} not found`);
+            const skillId = this.skillSelector.selectForTrigger({ eventType: triggerType, agentData: agentConfig });
+            let activeSkillId = null;
+            let activeSkillVersion = null;
 
-            const downtimeCorrelation = await this.paymentFailureCorrelationRepository.findFirstByPaymentId(payment.id);
+            if (skillId) {
+                const skill = await this.skillRegistry.getSkill(skillId);
+                if (skill) {
+                    activeSkillId = skill.id;
+                    activeSkillVersion = skill.version;
+                }
+            }
 
-            const recoveryCase = await this.recoveryCaseService.getOrCreateCase({
+            recoveryCase = await this.recoveryCaseService.getOrCreateCase({
                 type: 'PAYMENT_FAILURE',
-                identity: { paymentId: payment.id },
-                correlationId: downtimeCorrelation?.id || null,
-                contextSnapshot: payment,
+                identity: { paymentId },
+                subjectType: 'PAYMENT',
+                subjectId: paymentId,
+                activeSkillId,
+                activeSkillVersion
             });
-
-            await this.recoveryCaseService.markAnalyzing(recoveryCase.id);
-
-            const previousRecoveryActions = await this.recoveryActionRepository.findByCase(recoveryCase.id);
-
-            const contextBuilder = this.contextBuilderFactory ? await this.contextBuilderFactory(credentials) : null;
-            if (!contextBuilder) throw new Error('contextBuilderFactory is not provided');
-
-            return await contextBuilder.buildContext({
-                event: {
-                    id: triggerId || executionId,
-                    type: triggerType,
-                    occurredAt: execution.queuedAt?.toISOString()
-                },
-                payment,
-                provider,
-                downtimeCorrelation,
-                agent: agentConfig,
-                recoveryCase,
-                previousRecoveryActions,
-                availableCapabilities
-            });
+        } else {
+            throw new Error(`[TriggerContextResolver] Unsupported triggerType: ${triggerType}`);
         }
 
-        throw new Error(`[TriggerContextResolver] Unsupported triggerType: ${triggerType}`);
+        await this.recoveryCaseService.markAnalyzing(recoveryCase.id);
+
+        const registry = this.subjectContextRegistryFactory ? await this.subjectContextRegistryFactory(credentials) : null;
+        if (!registry) throw new Error('subjectContextRegistryFactory is not provided');
+
+        const contextProvider = registry.get(recoveryCase.subjectType);
+
+        return await contextProvider.buildContext({
+            subjectId: recoveryCase.subjectId,
+            execution,
+            recoveryCase,
+            agentConfig,
+            availableCapabilities,
+            credentials
+        });
     }
 }
 

@@ -26,7 +26,7 @@ export class SkillLoader {
      * @throws {Error}
      */
     async loadSkillForEvent({ eventType, agentData, recoveryContext }) {
-        const skillId = this.skillSelector.selectSkill({ eventType, agentData });
+        const skillId = this.skillSelector.selectForTrigger({ eventType, agentData });
 
         if (!skillId) {
             throw new Error(`[SkillLoader] No applicable skill found for event ${eventType}`);
@@ -41,6 +41,35 @@ export class SkillLoader {
         this.skillValidator.validate({
             skill,
             eventType,
+            recoveryContext,
+            agentData
+        });
+
+        return skill;
+    }
+
+    /**
+     * @param {Object} params
+     * @param {Object} params.recoveryCase
+     * @param {Object} params.recoveryContext
+     * @param {Object} params.agentData
+     * @returns {Promise<Skill>} loaded and validated skill
+     * @throws {Error}
+     */
+    async loadFromRecoveryCase({ recoveryCase, recoveryContext, agentData }) {
+        if (!recoveryCase.activeSkillId) {
+            throw new Error(`[SkillLoader] RecoveryCase ${recoveryCase.id} has no activeSkillId.`);
+        }
+
+        const skill = await this.skillRegistry.getSkill(recoveryCase.activeSkillId, recoveryCase.activeSkillVersion);
+
+        if (!skill) {
+            throw new Error(`[SkillLoader] Exact Skill ${recoveryCase.activeSkillId} (v${recoveryCase.activeSkillVersion}) not found.`);
+        }
+
+        this.skillValidator.validate({
+            skill,
+            eventType: 'recovery.schedule',
             recoveryContext,
             agentData
         });

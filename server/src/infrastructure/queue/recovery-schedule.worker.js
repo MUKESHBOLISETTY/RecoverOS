@@ -83,7 +83,6 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             status: 'QUEUED',
             recoveryCaseId: recoveryCase.id,
             inputContext: {
-                paymentId: recoveryCase.paymentId,
                 scheduledReason: schedule.reason,
                 scheduleId,
             }

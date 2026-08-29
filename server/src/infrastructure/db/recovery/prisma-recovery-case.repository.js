@@ -100,6 +100,17 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
                 data: { status: 'WAITING' }
             });
 
+            await tx.recoverySchedule.updateMany({
+                where: {
+                    recoveryCaseId: caseId,
+                    status: 'SCHEDULED'
+                },
+                data: {
+                    status: 'CANCELLED',
+                    cancelledAt: new Date()
+                }
+            });
+
             const schedule = await tx.recoverySchedule.create({
                 data: {
                     recoveryCaseId: caseId,
@@ -170,7 +181,7 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
                         amountRecovered: payment.amount,
                         notes: `Recovered via ${entity.id} (event: payment.captured)`
                     },
-                    update: {} 
+                    update: {}
                 });
 
                 if (recoveryCase.status !== 'RECOVERED') {

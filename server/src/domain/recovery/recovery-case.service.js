@@ -30,9 +30,13 @@ export class RecoveryCaseService {
      * @param {Object} params.identity - { paymentId: '...' }
      * @param {string} [params.correlationId]
      * @param {Object} [params.contextSnapshot]
+     * @param {string} [params.subjectType]
+     * @param {string} [params.subjectId]
+     * @param {string} [params.activeSkillId]
+     * @param {number} [params.activeSkillVersion]
      * @returns {Promise<Object>} RecoveryCase
      */
-    async getOrCreateCase({ type, identity, correlationId = null, contextSnapshot = null }) {
+    async getOrCreateCase({ type, identity, correlationId = null, contextSnapshot = null, subjectType = null, subjectId = null, activeSkillId = null, activeSkillVersion = null }) {
         if (!type || !identity || Object.keys(identity).length === 0) {
             throw new Error('RecoveryCaseService.getOrCreateCase: type and identity are required');
         }
@@ -45,6 +49,10 @@ export class RecoveryCaseService {
         return this.recoveryCaseRepository.create({
             type,
             ...identity,
+            subjectType,
+            subjectId,
+            activeSkillId,
+            activeSkillVersion,
             correlationId: correlationId || null,
             status: 'OPEN',
             contextSnapshot: contextSnapshot || null,

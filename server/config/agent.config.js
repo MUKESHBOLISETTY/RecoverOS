@@ -59,10 +59,10 @@ const policyEvaluator = new PolicyEvaluator();
 
 const agentGraph = createAgentGraph(agentNode, toolAdapter, policyEvaluator, agentExecutionRepository);
 
-const toolRegistry = new MemoryToolRegistry();
-const skillRegistry = new MemorySkillRegistry();
-const skillSelector = new SkillSelector();
-const skillValidator = new SkillValidator();
+export const toolRegistry = new MemoryToolRegistry();
+import { skillRegistry, skillSelector } from './skills.config.js';
+export { skillRegistry, skillSelector };
+export const skillValidator = new SkillValidator();
 const skillLoader = new SkillLoader(skillRegistry, skillSelector, skillValidator);
 const policyContextBuilder = new PolicyContextBuilder();
 const dynamicToolResolver = new DynamicToolResolver(toolRegistry);

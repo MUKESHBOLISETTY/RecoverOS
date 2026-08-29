@@ -15,7 +15,7 @@ export class SkillSelector {
      * @param {Object} params.agentData
      * @returns {string|null} skill id or null
      */
-    selectSkill({ eventType, agentData }) {
+    selectForTrigger({ eventType, agentData }) {
         if (!eventType || !agentData) {
             return null;
         }

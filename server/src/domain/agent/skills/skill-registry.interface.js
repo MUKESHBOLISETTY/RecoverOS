@@ -5,9 +5,10 @@
 export class SkillRegistryInterface {
     /**
      * @param {string} skillId
+     * @param {number} [version]
      * @returns {Promise<Skill|null>}
      */
-    async getSkill(skillId) {
+    async getSkill(skillId, version = null) {
         throw new Error('Method not implemented.');
     }
 

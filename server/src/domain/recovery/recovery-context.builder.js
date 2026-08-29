@@ -1,3 +1,5 @@
+import { MoneyFormatter } from '../payment/money-formatter.js';
+
 export class RecoveryContextBuilder {
     /**
      * @param {import('./failure-diagnosis.service.js').FailureDiagnosisService} failureDiagnosisService
@@ -75,13 +77,18 @@ export class RecoveryContextBuilder {
             }))
         };
 
+        const paymentData = payment ? {
+            ...payment,
+            displayAmount: MoneyFormatter.format(payment.amount, payment.currency || 'INR')
+        } : null;
+
         return {
             event: {
                 id: event.id,
                 type: event.type,
                 occurredAt: event.occurredAt || new Date().toISOString()
             },
-            payment,
+            payment: paymentData,
             order,
             failure,
             downtimeCorrelation: downtimeCorrelation || null,

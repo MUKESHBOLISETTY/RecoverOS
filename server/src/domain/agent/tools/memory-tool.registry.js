@@ -54,7 +54,7 @@ export class MemoryToolRegistry extends ToolRegistryInterface {
                 readOnly: false,
                 inputSchema: z.object({
                     paymentId: z.string().describe('The ID of the failed payment'),
-                    amount: z.number().describe('The amount to recover'),
+                    amount: z.number().describe('The amount to recover in minor units (e.g. for INR, 47900 means ₹479.00)'),
                     customerId: z.string().optional(),
                     notes: z.record(z.string()).optional()
                 }),

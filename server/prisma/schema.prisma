@@ -195,7 +195,14 @@ model RecoveryCase {
   id        String  @id @default(uuid()) @db.Uuid
   
   type      RecoveryCaseType @default(PAYMENT_FAILURE)
+
+  subjectType String?
+  subjectId   String?
+
+  activeSkillId      String?
+  activeSkillVersion Int?
   
+  // Legacy fields
   paymentId String?  @db.Uuid
   payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 

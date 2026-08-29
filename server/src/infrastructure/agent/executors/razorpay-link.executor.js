@@ -1,6 +1,7 @@
 import { ToolExecutorInterface } from '../../../domain/agent/tools/tool-executor.interface.js';
 import { ToolExecutionError } from '../../../domain/agent/errors/tool-execution.error.js';
 import Razorpay from 'razorpay';
+import { MoneyFormatter } from '../../../domain/payment/money-formatter.js';
 
 export class RazorpayLinkExecutor extends ToolExecutorInterface {
     /**
@@ -104,7 +105,8 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
                 id: paymentLink.id,
                 short_url: paymentLink.short_url,
                 status: paymentLink.status,
-                amount: paymentLink.amount
+                amount: paymentLink.amount,
+                displayAmount: MoneyFormatter.format(paymentLink.amount, payload.currency)
             };
 
             await this.recoveryActionRepository.create({

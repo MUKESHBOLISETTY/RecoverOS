@@ -38,11 +38,20 @@ export class ContextAssembler {
             activeConnections
         } = params;
 
-        const skill = await this.skillLoader.loadSkillForEvent({
-            eventType,
-            agentData,
-            recoveryContext
-        });
+        let skill;
+        if (eventType === 'recovery.schedule') {
+            skill = await this.skillLoader.loadFromRecoveryCase({
+                recoveryCase: recoveryContext.recoveryCase,
+                recoveryContext,
+                agentData
+            });
+        } else {
+            skill = await this.skillLoader.loadSkillForEvent({
+                eventType,
+                agentData,
+                recoveryContext
+            });
+        }
 
         const policyContext = this.policyContextBuilder.build(agentData);
 
