@@ -43,7 +43,7 @@ export class SkillValidator {
         }
 
         for (const req of skill.requiredContext) {
-            if (recoveryContext[req] === undefined || recoveryContext[req] === null) {
+            if (recoveryContext[req] === undefined) {
                 throw new Error(`[SkillValidator] Missing required context property '${req}' for skill ${skill.id}`);
             }
         }

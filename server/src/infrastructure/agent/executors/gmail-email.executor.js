@@ -1,7 +1,16 @@
 import ToolExecutor from '../../../domain/agent/tools/tool-executor.interface.js';
+import { ToolExecutionError } from '../../../domain/agent/errors/tool-execution.error.js';
 import { google } from 'googleapis';
 
 class GmailEmailExecutor extends ToolExecutor {
+    /**
+     * @param {import('../../connectors/connector.manager.js').ConnectorManager} connectorManager
+     */
+    constructor(connectorManager) {
+        super();
+        this.connectorManager = connectorManager;
+    }
+
     /**
      * @param {Object} params 
      * @param {Object} params.parameters
@@ -14,22 +23,27 @@ class GmailEmailExecutor extends ToolExecutor {
     async execute({ parameters, activeConnection }) {
         const { toEmail, subject, body } = parameters;
 
-        if (!activeConnection || !activeConnection.decryptedData) {
-            console.warn('[GmailEmailExecutor] No active connection or decrypted credentials provided.');
-            return {
-                status: 'failed',
-                error: 'No active connection credentials found for Gmail.'
-            };
+        if (!activeConnection || !activeConnection.connectorId) {
+            throw new Error('[GmailEmailExecutor] No active connection connectorId provided.');
         }
 
-        const { clientId, clientSecret, refreshToken } = activeConnection.decryptedData;
+        const credentials = await this.connectorManager.getDecryptedCredentialsById(activeConnection.connectorId);
 
-        if (!clientId || !clientSecret || !refreshToken) {
-            return {
-                status: 'failed',
-                error: 'Invalid Gmail connection credentials.'
-            };
+        const fieldsPresent = credentials ? Object.keys(credentials).filter(k => ['clientId', 'clientSecret', 'refreshToken'].includes(k)) : [];
+        console.log(`credentialFieldsPresent:\n${JSON.stringify(fieldsPresent, null, 2)}`);
+
+        if (!credentials || !credentials.clientId || !credentials.clientSecret || !credentials.refreshToken) {
+            throw new ToolExecutionError({
+                code: 'CONNECTOR_CREDENTIAL_INVALID',
+                message: 'The connected Gmail credentials are invalid or unavailable.',
+                retryable: false,
+                recoverable: false,
+                requiresConfiguration: true,
+                requiresHumanReview: false
+            });
         }
+
+        const { clientId, clientSecret, refreshToken } = credentials;
 
         try {
             const oauth2Client = new google.auth.OAuth2(
@@ -75,10 +89,17 @@ class GmailEmailExecutor extends ToolExecutor {
 
         } catch (error) {
             console.error('[GmailEmailExecutor] Failed to send email:', error);
-            return {
-                status: 'failed',
-                error: error.message || 'Unknown error occurred while sending email'
-            };
+
+            const isAuthError = error.code === 401 || error.message?.toLowerCase().includes('auth') || error.message?.toLowerCase().includes('credential');
+
+            throw new ToolExecutionError({
+                code: isAuthError ? 'CONNECTOR_CREDENTIAL_INVALID' : 'PROVIDER_API_ERROR',
+                message: isAuthError ? 'Gmail authentication failed. Credentials may be revoked.' : 'Failed to send email due to a provider error.',
+                retryable: !isAuthError,
+                recoverable: false,
+                requiresConfiguration: isAuthError,
+                requiresHumanReview: false
+            });
         }
     }
 }

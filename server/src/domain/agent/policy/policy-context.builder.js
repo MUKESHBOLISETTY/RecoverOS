@@ -11,7 +11,7 @@ export class PolicyContextBuilder {
         }
 
         const rules = agentData.rules || {};
-        const allowedActions = agentData.allowedActions || [];
+        const allowedActions = agentData.actions || [];
         const stopConditions = agentData.stopConditions || [];
 
         return new PolicyContext({
@@ -29,7 +29,7 @@ export class PolicyContextBuilder {
             return defaultVal;
         }
         const parsed = Number(val);
-        return isNaN(parsed) ? defaultVal : parsed;
+        return Number.isNaN(parsed) ? defaultVal : parsed;
     }
 }
 

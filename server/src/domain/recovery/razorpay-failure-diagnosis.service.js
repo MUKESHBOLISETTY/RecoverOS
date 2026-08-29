@@ -16,10 +16,10 @@ export class RazorpayFailureDiagnosisService {
         let severity = 'LOW';
 
         let recoverability = 'UNKNOWN';
-        let retryable = false;
+        let retryable = null;
 
         let confidenceScore = 0.4;
-        let recommendedRecovery = 'ESCALATE';
+        let recommendedStrategy = 'ASSESS';
         let nextEvaluationAt = null;
 
         if (payment.errorSource) {
@@ -58,6 +58,11 @@ export class RazorpayFailureDiagnosisService {
             'bank_unavailable',
         ].includes(reason);
 
+        const isGatewayFailure =
+            payment.errorSource === 'gateway' &&
+            payment.errorStep === 'payment_authorization' &&
+            reason === 'payment_failed';
+
         if (downtimeCorrelation?.status === 'MATCHED') {
             const downtimeSeverityMap = { low: 'LOW', medium: 'MEDIUM', high: 'HIGH' };
             const downtimeSeverity = downtimeSeverityMap[downtimeCorrelation.severity?.toLowerCase()] || 'HIGH';
@@ -76,12 +81,21 @@ export class RazorpayFailureDiagnosisService {
             retryable = true;
 
             confidenceScore = downtimeCorrelation.confidence === 'HIGH' ? 0.97 : (downtimeCorrelation.confidence === 'MEDIUM' ? 0.85 : 0.70);
-            recommendedRecovery = 'WAIT';
+            recommendedStrategy = 'WAIT';
 
             if (downtimeCorrelation.downtimeContext?.end) {
                 nextEvaluationAt = new Date(downtimeCorrelation.downtimeContext.end).toISOString();
             }
 
+        }
+        else if (isGatewayFailure) {
+            category = 'GATEWAY_FAILURE';
+            diagnosisCode = 'GATEWAY_PAYMENT_FAILURE';
+            severity = 'MEDIUM';
+            recoverability = 'MEDIUM';
+            retryable = false;
+            confidenceScore = 0.68;
+            recommendedStrategy = 'ASSESS';
         }
         else if (isInsufficientFunds) {
             category = 'INSUFFICIENT_FUNDS';
@@ -90,7 +104,7 @@ export class RazorpayFailureDiagnosisService {
             recoverability = 'MEDIUM';
             retryable = true;
             confidenceScore = 0.90;
-            recommendedRecovery = 'WAIT';
+            recommendedStrategy = 'WAIT';
             nextEvaluationAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
         } else if (isCustomerActionRequired) {
             category = 'CUSTOMER_ACTION_REQUIRED';
@@ -99,7 +113,7 @@ export class RazorpayFailureDiagnosisService {
             recoverability = 'HIGH';
             retryable = false;
             confidenceScore = 0.92;
-            recommendedRecovery = 'CONTACT';
+            recommendedStrategy = 'CUSTOMER_ACTION';
         } else if (isExplicitDecline) {
             category = 'BANK_DECLINE';
             diagnosisCode = 'BANK_DECLINE';
@@ -107,7 +121,7 @@ export class RazorpayFailureDiagnosisService {
             recoverability = 'LOW';
             retryable = false;
             confidenceScore = 0.90;
-            recommendedRecovery = 'CONTACT';
+            recommendedStrategy = 'CUSTOMER_ACTION';
         }
         else if (isTransient) {
             category = 'INFRASTRUCTURE';
@@ -116,7 +130,7 @@ export class RazorpayFailureDiagnosisService {
             recoverability = 'HIGH';
             retryable = true;
             confidenceScore = 0.82;
-            recommendedRecovery = 'RETRY';
+            recommendedStrategy = 'RETRY';
         }
 
         if (downtimeCorrelation?.status === 'CANDIDATE') {
@@ -137,7 +151,7 @@ export class RazorpayFailureDiagnosisService {
             recoverability,
             retryable,
             confidenceScore,
-            recommendedRecovery,
+            recommendedStrategy,
             nextEvaluationAt,
             downtimeCorrelation: downtimeCorrelation
                 ? {

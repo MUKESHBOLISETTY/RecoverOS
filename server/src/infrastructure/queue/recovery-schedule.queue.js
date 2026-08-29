@@ -16,7 +16,7 @@ export class RecoveryScheduleQueue extends BullQueueService {
             'fire-recovery-schedule',
             { scheduleId },
             {
-                jobId: `outbox:${eventId}`,
+                jobId: `outbox-${eventId}`,
                 delay: delayMs,
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 2000 },

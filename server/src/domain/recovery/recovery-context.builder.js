@@ -37,7 +37,10 @@ export class RecoveryContextBuilder {
             availableCapabilities = []
         } = params;
 
-        const failure = this.failureDiagnosisService.analyze({ payment, provider, downtimeCorrelation });
+        let failure = null;
+        if (event.type === 'payment.failed') {
+            failure = this.failureDiagnosisService.analyze({ payment, provider, downtimeCorrelation });
+        }
 
         let order = null;
         if (payment.orderId) {
@@ -58,12 +61,19 @@ export class RecoveryContextBuilder {
             }
         }
 
-        const previousRecoveryAttempts = previousRecoveryActions.map(a => ({
-            action: a.type,
-            status: a.status,
-            payload: a.payload || null,
-            occurredAt: a.createdAt
-        }));
+        const contactAttempts = previousRecoveryActions.filter(a => ['EMAIL', 'SMS', 'WHATSAPP', 'IN_APP'].includes(a.type)).length;
+        const automatedRecoveryActions = previousRecoveryActions.length - contactAttempts;
+
+        const recoveryHistory = {
+            contactAttempts,
+            automatedRecoveryActions,
+            actions: previousRecoveryActions.map(a => ({
+                action: a.type,
+                status: a.status,
+                payload: a.payload || null,
+                occurredAt: a.createdAt
+            }))
+        };
 
         return {
             event: {
@@ -80,7 +90,7 @@ export class RecoveryContextBuilder {
                 status: recoveryCase.status,
                 strategyApplied: recoveryCase.strategyApplied || null
             } : null,
-            previousRecoveryAttempts,
+            recoveryHistory,
             customerHistory,
             agentPolicy,
             availableCapabilities

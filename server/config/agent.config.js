@@ -21,17 +21,27 @@ import PrismaRecoveryActionRepository from '../src/infrastructure/db/agent/prism
 import PrismaRecoveryScheduleRepository from '../src/infrastructure/db/schedule/prisma-recovery-schedule.repository.js';
 import PrismaOutboxEventRepository from '../src/infrastructure/db/outbox/prisma-outbox-event.repository.js';
 
+import MemoryToolRegistry from '../src/domain/agent/tools/memory-tool.registry.js';
+import MemorySkillRegistry from '../src/domain/agent/skills/memory-skill.registry.js';
+import DynamicToolResolver from '../src/domain/agent/tools/dynamic-tool.resolver.js';
+import SkillLoader from '../src/domain/agent/skills/skill-loader.js';
+import PolicyContextBuilder from '../src/domain/agent/policy/policy-context.builder.js';
+import ContextAssembler from '../src/domain/agent/execution/context-assembler.js';
+import SkillValidator from '../src/domain/agent/skills/skill-validator.js';
+import SkillSelector from '../src/domain/agent/skills/skill-selector.js';
+
 const toolExecutorFactory = new ToolExecutorFactory();
 
-toolExecutorFactory.registerExecutor('communication.email', new GmailEmailExecutor());
-toolExecutorFactory.registerExecutor('payment_link.create', new RazorpayLinkExecutor());
-toolExecutorFactory.registerExecutor('communication.whatsapp', new WhatsAppMessageExecutor());
+import { connectorManager } from './connectors.config.js';
 
+toolExecutorFactory.registerExecutor('communication.email', new GmailEmailExecutor(connectorManager));
 const recoveryCaseRepository = new PrismaRecoveryCaseRepository(prisma);
 const recoveryActionRepository = new PrismaRecoveryActionRepository(prisma);
 const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
 const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
 
+toolExecutorFactory.registerExecutor('communication.whatsapp', new WhatsAppMessageExecutor());
+toolExecutorFactory.registerExecutor('payment_link.create', new RazorpayLinkExecutor(connectorManager, recoveryActionRepository));
 toolExecutorFactory.registerExecutor('recovery.escalate', new EscalateRecoveryExecutor(recoveryCaseRepository, recoveryActionRepository, cacheService));
 toolExecutorFactory.registerExecutor('recovery.schedule', new ScheduleRecoveryExecutor(recoveryCaseRepository, recoveryScheduleRepository, recoveryActionRepository, outboxEventRepository, cacheService));
 
@@ -48,6 +58,16 @@ const agentNode = new AgentNode(toolAdapter);
 const policyEvaluator = new PolicyEvaluator();
 
 const agentGraph = createAgentGraph(agentNode, toolAdapter, policyEvaluator, agentExecutionRepository);
+
+const toolRegistry = new MemoryToolRegistry();
+const skillRegistry = new MemorySkillRegistry();
+const skillSelector = new SkillSelector();
+const skillValidator = new SkillValidator();
+const skillLoader = new SkillLoader(skillRegistry, skillSelector, skillValidator);
+const policyContextBuilder = new PolicyContextBuilder();
+const dynamicToolResolver = new DynamicToolResolver(toolRegistry);
+
+export const contextAssembler = new ContextAssembler(skillLoader, policyContextBuilder, dynamicToolResolver);
 
 export const agentService = new LangchainAgentService(agentGraph);
 

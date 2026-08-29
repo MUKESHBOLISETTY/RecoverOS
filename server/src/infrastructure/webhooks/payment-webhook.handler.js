@@ -86,7 +86,7 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                     const execution = await agentExecutionService.createExecution({
                         agent,
                         userId,
-                        triggerType: 'PROVIDER_EVENT',
+                        triggerType: eventType,
                         triggerId: eventId || null,
                         externalTriggerId: externalEventId || null,
                         eventType,

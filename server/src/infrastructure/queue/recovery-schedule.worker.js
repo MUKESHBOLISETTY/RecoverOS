@@ -77,7 +77,7 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             agentId: origExecution.agentId,
             agentVersion: origExecution.agentVersion,
             userId: origExecution.userId,
-            triggerType: 'RECOVERY_SCHEDULE',
+            triggerType: 'recovery.schedule',
             triggerId: scheduleId,
             provider: 'system.scheduled',
             status: 'QUEUED',

@@ -43,6 +43,35 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
         });
 
         this.skills.set(paymentFailureRecovery.id, paymentFailureRecovery);
+
+        const recoveryReEvaluation = new Skill({
+            id: 'recovery_re_evaluation',
+            version: 1,
+            purpose: 'Re-evaluate an existing recovery case upon a scheduled follow-up or manual retry.',
+            supportedEvents: [
+                'recovery.schedule'
+            ],
+            requiredContext: [
+                'recoveryCase',
+                'recoveryHistory'
+            ],
+            toolCategories: [
+                'payment.read',
+                'payment.recovery',
+                'communication',
+                'system.internal',
+                'scheduling'
+            ],
+            instructions: [
+                'Review the previous recovery actions in the history.',
+                'Do not blindly repeat the same actions that have already failed.',
+                'If the payment was successful, stop the recovery process.',
+                'If limits are reached, escalate the case.',
+                'Choose a safe next step based on the current policy.'
+            ]
+        });
+
+        this.skills.set(recoveryReEvaluation.id, recoveryReEvaluation);
     }
 
     /**

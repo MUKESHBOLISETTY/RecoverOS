@@ -31,8 +31,18 @@ export class LangchainAgentService extends BaseAgentService {
             agentData: options.agentData || null,
             executionId: options.executionId || null,
             recoveryContext: options.recoveryContext || null,
-            activeConnections: options.activeConnections || []
+            activeConnections: options.activeConnections || [],
+            skill: options.executionContext?.skill || null,
+            policyContext: options.executionContext?.policyContext || null,
+            resolvedTools: options.executionContext?.resolvedTools || []
         };
+
+        console.log(`[LangchainAgentService] initialState summary:`, {
+            hasSkill: !!initialState.skill,
+            hasPolicyContext: !!initialState.policyContext,
+            resolvedToolsCount: initialState.resolvedTools.length,
+            activeConnectionsCount: initialState.activeConnections.length
+        });
 
         const runnableConfig = {
             callbacks: [tracer],

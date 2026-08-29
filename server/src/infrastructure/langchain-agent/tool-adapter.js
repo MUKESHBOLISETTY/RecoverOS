@@ -37,9 +37,31 @@ export class ToolAdapter {
                             )
                         });
 
-                        return JSON.stringify(result);
+                        return JSON.stringify({ success: true, data: result });
                     } catch (error) {
-                        return `[Error Execution Failed] ${error.message}`;
+                        if (error.name === 'ToolExecutionError') {
+                            return JSON.stringify({
+                                success: false,
+                                error: {
+                                    code: error.code,
+                                    message: error.message,
+                                    retryable: error.retryable,
+                                    recoverable: error.recoverable,
+                                    requiresConfiguration: error.requiresConfiguration
+                                }
+                            });
+                        }
+                        
+                        return JSON.stringify({
+                            success: false,
+                            error: {
+                                code: 'INTERNAL_ERROR',
+                                message: error.message,
+                                retryable: false,
+                                recoverable: false,
+                                requiresConfiguration: false
+                            }
+                        });
                     }
                 },
                 {

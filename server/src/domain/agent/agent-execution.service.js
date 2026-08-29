@@ -34,7 +34,7 @@ export class AgentExecutionService {
                 agentId: input.agent.id,
                 agentVersion: input.agent.version,
                 userId: input.userId,
-                triggerType: input.triggerType || 'PROVIDER_EVENT',
+                triggerType: input.triggerType,
                 triggerId: input.triggerId || null,
                 externalTriggerId: input.externalTriggerId || null,
                 provider: input.provider || null,

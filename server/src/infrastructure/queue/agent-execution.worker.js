@@ -3,31 +3,19 @@ import { BaseWorkerService } from './base-worker.service.js';
 export class AgentExecutionWorker extends BaseWorkerService {
     /**
      * @param {import('../db/agent/prisma-agent-execution.repository.js').PrismaAgentExecutionRepository} agentExecutionRepository
-     * @param {import('../db/payment/prisma-payment.repository.js').PrismaPaymentRepository} paymentRepository
-     * @param {import('../db/correlation/prisma-payment-failure-correlation.repository.js').PrismaPaymentFailureCorrelationRepository} paymentFailureCorrelationRepository
-     * @param {import('../db/agent/prisma-recovery-action.repository.js').PrismaRecoveryActionRepository} recoveryActionRepository
      * @param {import('../db/agent/prisma-agent.repository.js').PrismaAgentRepository} agentRepository
-     * @param {import('../../domain/recovery/recovery-case.service.js').RecoveryCaseService} recoveryCaseService
-     * @param {Function} contextBuilderFactory
+     * @param {import('../../domain/agent/execution/trigger-context.resolver.js').TriggerContextResolver} triggerContextResolver
      */
     constructor(
         agentExecutionRepository,
-        paymentRepository,
-        paymentFailureCorrelationRepository,
-        recoveryActionRepository,
         agentRepository,
-        recoveryCaseService,
-        contextBuilderFactory
+        triggerContextResolver
     ) {
         super('agent-execution');
         if (!agentExecutionRepository) throw new Error('AgentExecutionWorker: agentExecutionRepository is required');
         this.agentExecutionRepository = agentExecutionRepository;
-        this.paymentRepository = paymentRepository;
-        this.paymentFailureCorrelationRepository = paymentFailureCorrelationRepository;
-        this.recoveryActionRepository = recoveryActionRepository;
         this.agentRepository = agentRepository;
-        this.recoveryCaseService = recoveryCaseService;
-        this.contextBuilderFactory = contextBuilderFactory;
+        this.triggerContextResolver = triggerContextResolver;
     }
 
     /**
@@ -59,106 +47,70 @@ export class AgentExecutionWorker extends BaseWorkerService {
 
             const { triggerType, inputContext, provider } = execution;
 
-            let fullContext = null;
-            let agentConfig = null;
-            let activeConnections = [];
+        let fullContext = null;
+        let agentConfig = null;
+        let activeConnections = [];
 
-            if (triggerType === 'PROVIDER_EVENT' || triggerType === 'RECOVERY_SCHEDULE') {
-                const paymentId = inputContext?.paymentId;
+        agentConfig = await this.agentRepository.findById(execution.agentId);
 
-                if (paymentId) {
-                    const {
-                        RecoveryContextBuilder
-                    } = await import('../../domain/recovery/recovery-context.builder.js');
-                    const {
-                        FailureDiagnosisService
-                    } = await import('../../domain/recovery/failure-diagnosis.service.js');
-                    const {
-                        OrderContextService
-                    } = await import('../../domain/recovery/order-context.service.js');
-                    const {
-                        RazorpayOrderRepository
-                    } = await import('../../infrastructure/razorpay/razorpay-order.repository.js');
-                    const { cacheService } = await import('../../../config/redis.config.js');
-
-                    const payment = await this.paymentRepository.findByRazorpayId(paymentId) || await this.paymentRepository.findById(paymentId);
-                    if (!payment) throw new Error(`Payment ${paymentId} not found`);
-
-                    const downtimeCorrelation = await this.paymentFailureCorrelationRepository.findFirstByPaymentId(payment.id);
-
-                    const recoveryCase = await this.recoveryCaseService.getOrCreateCase({
-                        type: 'PAYMENT_FAILURE',
-                        identity: { paymentId: payment.id },
-                        correlationId: downtimeCorrelation?.id || null,
-                        contextSnapshot: payment,
-                    });
-
-                    await this.recoveryCaseService.markAnalyzing(recoveryCase.id);
-
-                    await this.agentExecutionRepository.update(executionId, {
-                        recoveryCaseId: recoveryCase.id
-                    });
-
-                    const previousRecoveryActions = await this.recoveryActionRepository.findByCase(recoveryCase.id);
-
-                    agentConfig = await this.agentRepository.findById(execution.agentId);
-
-                    let credentials = {};
-                    if (payment.connectionId) {
-                        credentials = await connectorManager.getDecryptedCredentialsById(payment.connectionId) || {};
-                    }
-
-                    const allCapabilities = new Set();
-                    if (agentConfig?.connections) {
-                        for (const ac of agentConfig.connections) {
-                            try {
-                                const capabilities = await connectorManager.getConnectorCapabilities(ac.connectorId);
-                                activeConnections.push({
-                                    connectorId: ac.connectorId,
-                                    provider: ac.connector.connectorId,
-                                    capabilities,
-                                });
-                                for (const cap of capabilities) {
-                                    allCapabilities.add(cap);
-                                }
-                            } catch (err) {
-                                console.error(`[AgentExecutionWorker] Failed capabilities for connector ${ac.connectorId}:`, err.message);
-                            }
-                        }
-                    }
-                    const availableCapabilities = Array.from(allCapabilities);
-
-                    const contextBuilder = this.contextBuilderFactory ? await this.contextBuilderFactory(credentials) : null;
-                    if (!contextBuilder) throw new Error('contextBuilderFactory is not provided');
-
-                    fullContext = await contextBuilder.buildContext({
-                        event: {
-                            id: execution.triggerId || executionId,
-                            type: triggerType,
-                            occurredAt: execution.queuedAt?.toISOString()
-                        },
-                        payment,
-                        provider,
-                        downtimeCorrelation,
-                        agent: agentConfig,
-                        recoveryCase,
-                        previousRecoveryActions,
-                        availableCapabilities
-                    });
-
-                    await this.agentExecutionRepository.update(executionId, {
-                        inputContext: fullContext
-                    });
-
-                    console.log(`[AgentExecutionWorker] RecoveryCase ${recoveryCase.id} resolved (status: ${recoveryCase.status}). Context built.`);
-                }
-            } else {
-                console.log(`[AgentExecutionWorker] Unhandled triggerType "${triggerType}". Skipping context build.`);
+        let credentials = {};
+        const { connectorManager } = await import('../../../config/connectors.config.js');
+        if (execution.inputContext?.paymentId || execution.inputContext?.subject?.id) {
+            const paymentId = execution.inputContext.paymentId || execution.inputContext.subject.id;
+            const { prisma } = await import('../../../config/database.config.js');
+            const payment = await prisma.payment.findUnique({ where: { id: paymentId } }) || 
+                            await prisma.payment.findUnique({ where: { razorpayPaymentId: paymentId }});
+            if (payment?.connectionId) {
+                credentials = await connectorManager.getDecryptedCredentialsById(payment.connectionId) || {};
             }
+        }
+
+        const allCapabilities = new Set();
+        if (agentConfig?.connections) {
+            for (const ac of agentConfig.connections) {
+                try {
+                    const capabilities = await connectorManager.getConnectorCapabilities(ac.connectorId);
+                    activeConnections.push({
+                        connectorId: ac.connectorId,
+                        provider: ac.connector.connectorId,
+                        capabilities,
+                    });
+                    for (const cap of capabilities) {
+                        allCapabilities.add(cap);
+                    }
+                } catch (err) {
+                    console.error(`[AgentExecutionWorker] Failed capabilities for connector ${ac.connectorId}:`, err.message);
+                }
+            }
+        }
+        const availableCapabilities = Array.from(allCapabilities);
+
+        try {
+            fullContext = await this.triggerContextResolver.resolveContext(execution, agentConfig, availableCapabilities, credentials);
+
+            await this.agentExecutionRepository.update(executionId, {
+                inputContext: fullContext,
+                recoveryCaseId: fullContext.recoveryCase?.id || null
+            });
+            console.log(`[AgentExecutionWorker] TriggerContext resolved for execution ${executionId}.`);
+        } catch (error) {
+            console.error(`[AgentExecutionWorker] Failed to resolve trigger context:`, error.message);
+            // Optionally, handle failure to resolve context by halting or letting it fail down the line.
+            throw error; // Re-throw to fail the job
+        }
 
             let agentResponse = null;
             if (fullContext) {
-                const { agentService } = await import('../../../config/agent.config.js');
+                const { agentService, contextAssembler } = await import('../../../config/agent.config.js');
+
+                const executionContext = await contextAssembler.assemble({
+                    executionId,
+                    eventId: execution.triggerId || executionId,
+                    eventType: triggerType,
+                    agentData: agentConfig,
+                    recoveryContext: fullContext,
+                    activeConnections
+                });
 
                 const prompt = `An event of type '${triggerType}' was triggered. Analyze the context and execute the appropriate recovery tools according to your rules.\n\nContext:\n${JSON.stringify(fullContext, (_k, v) => typeof v === 'bigint' ? v.toString() : v, 2)}`;
 
@@ -168,6 +120,7 @@ export class AgentExecutionWorker extends BaseWorkerService {
                     executionId,
                     recoveryContext: fullContext,
                     activeConnections,
+                    executionContext
                 });
                 console.log(`[AgentExecutionWorker] LangGraph finished for execution ${executionId}.`);
             }

@@ -89,15 +89,20 @@ const contextBuilderFactory = async (credentials) => {
     return new RecoveryContextBuilder(failureDiagnosisService, orderContextService);
 };
 
-export const agentExecutionWorkerService = new AgentExecutionWorker(
-    agentExecutionRepository,
-    paymentRepository,
-    paymentFailureCorrelationRepository,
-    recoveryActionRepository,
-    agentRepository,
-    recoveryCaseService,
-    contextBuilderFactory
-);
+    const { TriggerContextResolver } = await import('../src/domain/agent/execution/trigger-context.resolver.js');
+    const triggerContextResolver = new TriggerContextResolver(
+        paymentRepository,
+        paymentFailureCorrelationRepository,
+        recoveryActionRepository,
+        recoveryCaseService,
+        contextBuilderFactory
+    );
+
+    export const agentExecutionWorkerService = new AgentExecutionWorker(
+        agentExecutionRepository,
+        agentRepository,
+        triggerContextResolver
+    );
 
 const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
 

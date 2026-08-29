@@ -39,9 +39,9 @@ export class FailureDiagnosisService {
             source: 'UNKNOWN',
             severity: 'LOW',
             recoverability: 'UNKNOWN',
-            retryable: false,
+            retryable: null,
             confidenceScore: 0.0,
-            recommendedRecovery: 'ESCALATE',
+            recommendedStrategy: 'ASSESS',
             nextEvaluationAt: null,
             downtimeCorrelation: downtimeCorrelation || null,
             evidence: []

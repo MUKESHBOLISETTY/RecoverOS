@@ -389,7 +389,7 @@ model AgentExecution {
 
   userId String @db.Uuid
 
-  triggerType      String   @default("PROVIDER_EVENT") // PROVIDER_EVENT | RECOVERY_SCHEDULE | SYSTEM_EVENT
+  triggerType      String   // payment.failed, recovery.schedule
   triggerId        String?  @db.Uuid // internal DB ID
   externalTriggerId String? // provider-assigned ID (Razorpay evt_xxx)
 
