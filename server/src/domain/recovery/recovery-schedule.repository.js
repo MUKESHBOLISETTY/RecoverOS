@@ -22,6 +22,10 @@ export class RecoveryScheduleRepository {
     async create(data, tx = null) {
         throw new Error('Method not implemented.');
     }
+
+    async findScheduledForReconciliation(batchSize) {
+        throw new Error('Method not implemented.');
+    }
 }
 
 export default RecoveryScheduleRepository;

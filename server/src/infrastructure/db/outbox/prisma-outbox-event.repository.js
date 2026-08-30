@@ -42,6 +42,26 @@ export class PrismaOutboxEventRepository extends OutboxEventRepository {
             }
         });
     }
+
+    async findLatestByAggregateIds(aggregateType, aggregateIds) {
+        if (!aggregateIds || aggregateIds.length === 0) return new Map();
+
+        const events = await this.prisma.outboxEvent.findMany({
+            where: {
+                aggregateType,
+                aggregateId: { in: aggregateIds }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        const latestMap = new Map();
+        for (const event of events) {
+            if (!latestMap.has(event.aggregateId)) {
+                latestMap.set(event.aggregateId, event);
+            }
+        }
+        return latestMap;
+    }
 }
 
 export default PrismaOutboxEventRepository;

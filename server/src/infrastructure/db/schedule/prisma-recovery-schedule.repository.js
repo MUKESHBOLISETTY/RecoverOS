@@ -63,6 +63,32 @@ export class PrismaRecoveryScheduleRepository extends RecoveryScheduleRepository
         const client = tx || this.prisma;
         return client.recoverySchedule.create({ data });
     }
+
+    async findScheduledForReconciliation(batchSize) {
+        const schedules = await this.prisma.recoverySchedule.findMany({
+            where: {
+                status: 'SCHEDULED',
+                triggeredExecutionId: null
+            },
+            orderBy: { executeAt: 'asc' },
+            take: batchSize
+        });
+
+        if (schedules.length === 0) return [];
+
+        const caseIds = [...new Set(schedules.map(s => s.recoveryCaseId))];
+        const cases = await this.prisma.recoveryCase.findMany({
+            where: { id: { in: caseIds } },
+            select: { id: true, status: true }
+        });
+
+        const caseMap = new Map(cases.map(c => [c.id, c]));
+
+        return schedules.map(s => ({
+            ...s,
+            recoveryCase: caseMap.get(s.recoveryCaseId) || null
+        }));
+    }
 }
 
 export default PrismaRecoveryScheduleRepository;

@@ -34,7 +34,7 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
         const previousRecoveryActions = await this.recoveryActionRepository.findByCase(recoveryCase.id);
 
         let failure = null;
-        if (execution.triggerType === 'payment.failed' || execution.triggerType === 'recovery.schedule') {
+        if (execution.triggerType === 'payment.failed') {
             failure = this.failureDiagnosisService.analyze({ payment, provider: execution.provider, downtimeCorrelation });
         }
 
@@ -71,7 +71,9 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
             recoveryCase: {
                 id: recoveryCase.id,
                 status: recoveryCase.status,
-                strategyApplied: recoveryCase.strategyApplied || null
+                strategyApplied: recoveryCase.strategyApplied || null,
+                activeSkillId: recoveryCase.activeSkillId || null,
+                activeSkillVersion: recoveryCase.activeSkillVersion || null
             },
             recoveryHistory: {
                 contactAttempts: previousRecoveryActions.filter(a => a.type !== 'INTERNAL_SYSTEM_ACTION').length,

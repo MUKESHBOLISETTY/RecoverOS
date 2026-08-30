@@ -8,15 +8,15 @@ export class RecoveryScheduleQueue extends BullQueueService {
     /**
      * @param {string} scheduleId 
      * @param {number} delayMs 
-     * @param {string} eventId
+     * @param {string} jobId
      * @returns {Promise<import('bullmq').Job>}
      */
-    async addScheduleJob(scheduleId, delayMs, eventId) {
+    async addScheduleJob(scheduleId, delayMs, jobId) {
         return await this.addJob(
             'fire-recovery-schedule',
             { scheduleId },
             {
-                jobId: `outbox-${eventId}`,
+                jobId,
                 delay: delayMs,
                 attempts: 3,
                 backoff: { type: 'exponential', delay: 2000 },

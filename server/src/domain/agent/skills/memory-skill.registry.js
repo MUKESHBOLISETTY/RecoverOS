@@ -18,7 +18,8 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
             purpose: 'Recover failed payments without unnecessary customer contact.',
             supportedEvents: [
                 'payment.failed',
-                'payment.downtime.resolved'
+                'payment.downtime.resolved',
+                'recovery.schedule'
             ],
             requiredContext: [
                 'payment',

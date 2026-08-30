@@ -82,8 +82,9 @@ export class OutboxPublisher {
         if (event.eventType === 'RECOVERY_SCHEDULE_CREATED') {
             const { scheduleId, delayMinutes } = event.payload;
             const delayMs = delayMinutes * 60 * 1000;
+            const canonicalJobId = `recovery-schedule-${scheduleId}`;
 
-            await this.recoveryScheduleQueue.addScheduleJob(scheduleId, delayMs, event.id);
+            await this.recoveryScheduleQueue.addScheduleJob(scheduleId, delayMs, canonicalJobId);
             return;
         }
 

@@ -132,6 +132,14 @@ export const recoveryScheduleWorkerService = new RecoveryScheduleWorker(
 const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
 export const outboxPublisher = new OutboxPublisher(outboxEventRepository, recoveryScheduleQueueService);
 
+import { RecoveryScheduleReconciler } from '../src/infrastructure/reconciliation/recovery-schedule.reconciler.js';
+export const recoveryScheduleReconciler = new RecoveryScheduleReconciler(
+    recoveryScheduleRepository,
+    outboxEventRepository,
+    recoveryCaseService,
+    recoveryScheduleQueueService
+);
+
 
 export async function connectRedis() {
     try {
@@ -154,6 +162,7 @@ export async function connectRedis() {
             await agentExecutionWorkerService.start();
             await recoveryScheduleWorkerService.start();
             outboxPublisher.start();
+            recoveryScheduleReconciler.start();
 
             if (!reconciliationQueue) {
                 try {
@@ -193,6 +202,7 @@ export async function disconnectRedis() {
         if (reconciliationWorker) await reconciliationWorker.close();
         if (reconciliationQueue) await reconciliationQueue.close();
 
+        recoveryScheduleReconciler.stop();
         await outboxPublisher.stop();
         await recoveryScheduleWorkerService.close();
         await webhookEventWorkerService.close();
