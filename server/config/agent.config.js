@@ -34,11 +34,12 @@ const toolExecutorFactory = new ToolExecutorFactory();
 
 import { connectorManager } from './connectors.config.js';
 
-toolExecutorFactory.registerExecutor('communication.email', new GmailEmailExecutor(connectorManager));
 const recoveryCaseRepository = new PrismaRecoveryCaseRepository(prisma);
 const recoveryActionRepository = new PrismaRecoveryActionRepository(prisma);
 const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
 const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
+
+toolExecutorFactory.registerExecutor('communication.email', new GmailEmailExecutor(connectorManager, recoveryActionRepository));
 
 toolExecutorFactory.registerExecutor('communication.whatsapp', new WhatsAppMessageExecutor());
 

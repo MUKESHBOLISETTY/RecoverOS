@@ -71,12 +71,16 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
             recoveryCase: {
                 id: recoveryCase.id,
                 status: recoveryCase.status,
+                subjectType: recoveryCase.subjectType || 'UNKNOWN',
+                subjectId: recoveryCase.subjectId || 'UNKNOWN',
                 strategyApplied: recoveryCase.strategyApplied || null,
                 activeSkillId: recoveryCase.activeSkillId || null,
                 activeSkillVersion: recoveryCase.activeSkillVersion || null
             },
             recoveryHistory: {
-                contactAttempts: previousRecoveryActions.filter(a => a.type !== 'INTERNAL_SYSTEM_ACTION').length,
+                contactAttempts: previousRecoveryActions.filter(a => {
+                    return !['INTERNAL_SYSTEM_ACTION', 'IN_APP'].includes(a.type);
+                }).length,
                 automatedRecoveryActions: previousRecoveryActions.filter(a => a.type === 'INTERNAL_SYSTEM_ACTION').length,
                 actions: previousRecoveryActions.map(a => ({
                     action: a.type,

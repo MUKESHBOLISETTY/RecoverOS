@@ -141,7 +141,7 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
                 await tx.recoveryAction.create({
                     data: {
                         recoveryCaseId: caseId,
-                        type: 'IN_APP',
+                        type: 'INTERNAL_SYSTEM_ACTION',
                         status: 'SCHEDULED',
                         payload: { reason, delayMinutes, scheduleId: schedule.id },
                         idempotencyKey: `schedule:${caseId}:${executionId}`,

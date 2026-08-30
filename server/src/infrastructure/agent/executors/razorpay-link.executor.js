@@ -77,7 +77,7 @@ export class RazorpayLinkExecutor extends ToolExecutorInterface {
         }
 
         const notes = {
-            recoveryContext: recoveryContext.diagnosisCode || 'UNKNOWN',
+            recoveryContext: recoveryContext?.failure?.diagnosisCode || 'UNKNOWN',
             discountApplied: parameters.discountPercent ? `${parameters.discountPercent}%` : '0%',
             recoveryCaseId: caseId,
             subjectType: recoveryContext.recoveryCase?.subjectType || 'UNKNOWN',

@@ -20,7 +20,7 @@ CREATE TYPE "RecoveryCaseStatus" AS ENUM ('OPEN', 'ANALYZING', 'WAITING', 'ACTIO
 CREATE TYPE "RecoveryCaseType" AS ENUM ('PAYMENT_FAILURE', 'CART_ABANDONMENT', 'SUBSCRIPTION_DUE');
 
 -- CreateEnum
-CREATE TYPE "RecoveryActionType" AS ENUM ('EMAIL', 'SMS', 'WHATSAPP', 'IN_APP');
+CREATE TYPE "RecoveryActionType" AS ENUM ('EMAIL', 'SMS', 'WHATSAPP', 'VOICE', 'IN_APP', 'INTERNAL_SYSTEM_ACTION');
 
 -- CreateEnum
 CREATE TYPE "ConnectorCategory" AS ENUM ('DATA_SOURCE', 'COMMUNICATION_SOURCE');
@@ -134,6 +134,10 @@ CREATE TABLE "PaymentFailureCorrelation" (
 CREATE TABLE "RecoveryCase" (
     "id" UUID NOT NULL,
     "type" "RecoveryCaseType" NOT NULL DEFAULT 'PAYMENT_FAILURE',
+    "subjectType" TEXT,
+    "subjectId" TEXT,
+    "activeSkillId" TEXT,
+    "activeSkillVersion" INTEGER,
     "paymentId" UUID,
     "cartId" UUID,
     "correlationId" UUID,
@@ -254,7 +258,7 @@ CREATE TABLE "AgentExecution" (
     "agentId" UUID NOT NULL,
     "agentVersion" INTEGER NOT NULL,
     "userId" UUID NOT NULL,
-    "triggerType" TEXT NOT NULL DEFAULT 'PROVIDER_EVENT',
+    "triggerType" TEXT NOT NULL,
     "triggerId" UUID,
     "externalTriggerId" TEXT,
     "provider" TEXT,
@@ -515,3 +519,6 @@ ALTER TABLE "AgentConnector" ADD CONSTRAINT "AgentConnector_agentId_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "AgentConnector" ADD CONSTRAINT "AgentConnector_connectorId_fkey" FOREIGN KEY ("connectorId") REFERENCES "ConnectorCredential"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RecoverySchedule" ADD CONSTRAINT "RecoverySchedule_recoveryCaseId_fkey" FOREIGN KEY ("recoveryCaseId") REFERENCES "RecoveryCase"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -1,5 +1,4 @@
 import { MoneyFormatter } from '../payment/money-formatter.js';
-
 export class RecoveryContextBuilder {
     /**
      * @param {import('./failure-diagnosis.service.js').FailureDiagnosisService} failureDiagnosisService
@@ -63,8 +62,10 @@ export class RecoveryContextBuilder {
             }
         }
 
-        const contactAttempts = previousRecoveryActions.filter(a => ['EMAIL', 'SMS', 'WHATSAPP', 'IN_APP'].includes(a.type)).length;
-        const automatedRecoveryActions = previousRecoveryActions.length - contactAttempts;
+        const contactAttempts = previousRecoveryActions.filter(a => {
+            return !['INTERNAL_SYSTEM_ACTION', 'IN_APP'].includes(a.type);
+        }).length;
+        const automatedRecoveryActions = previousRecoveryActions.filter(a => a.type === 'INTERNAL_SYSTEM_ACTION').length;
 
         const recoveryHistory = {
             contactAttempts,

@@ -5,10 +5,12 @@ import { google } from 'googleapis';
 class GmailEmailExecutor extends ToolExecutor {
     /**
      * @param {import('../../connectors/connector.manager.js').ConnectorManager} connectorManager
+     * @param {import('../../db/agent/prisma-recovery-action.repository.js').PrismaRecoveryActionRepository} recoveryActionRepository
      */
-    constructor(connectorManager) {
+    constructor(connectorManager, recoveryActionRepository) {
         super();
         this.connectorManager = connectorManager;
+        this.recoveryActionRepository = recoveryActionRepository;
     }
 
     /**
@@ -18,9 +20,11 @@ class GmailEmailExecutor extends ToolExecutor {
      * @param {string} params.parameters.subject
      * @param {string} params.parameters.body
      * @param {Object} params.activeConnection
+     * @param {Object} params.recoveryContext
+     * @param {string} params.executionId
      * @returns {Promise<Object>}
      */
-    async execute({ parameters, activeConnection }) {
+    async execute({ parameters, activeConnection, recoveryContext, executionId }) {
         const { toEmail, subject, body } = parameters;
 
         if (!activeConnection || !activeConnection.connectorId) {
@@ -81,11 +85,24 @@ class GmailEmailExecutor extends ToolExecutor {
                 }
             });
 
-            return {
+            const result = {
                 status: 'success',
                 messageId: res.data.id,
                 threadId: res.data.threadId
             };
+
+            const caseId = recoveryContext?.recoveryCase?.id;
+            if (caseId) {
+                await this.recoveryActionRepository.create({
+                    recoveryCaseId: caseId,
+                    type: 'EMAIL',
+                    status: 'COMPLETED',
+                    payload: result,
+                    idempotencyKey: `email:${caseId}:${executionId}`
+                });
+            }
+
+            return result;
 
         } catch (error) {
             console.error('[GmailEmailExecutor] Failed to send email:', error);

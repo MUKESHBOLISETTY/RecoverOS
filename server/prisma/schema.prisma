@@ -221,6 +221,7 @@ model RecoveryCase {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   actions RecoveryAction[]
+  schedules RecoverySchedule[]
   outcome Outcome?
 }
 
@@ -228,7 +229,9 @@ enum RecoveryActionType {
   EMAIL
   SMS
   WHATSAPP
+  VOICE
   IN_APP
+  INTERNAL_SYSTEM_ACTION
 }
 
 model RecoveryAction {
@@ -456,6 +459,7 @@ enum RecoveryScheduleStatus {
 model RecoverySchedule {
   id                   String                 @id @default(uuid()) @db.Uuid
   recoveryCaseId       String                 @db.Uuid
+  recoveryCase         RecoveryCase           @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   executeAt            DateTime               @db.Timestamptz(3)
   reason               String?
   status               RecoveryScheduleStatus @default(SCHEDULED)
