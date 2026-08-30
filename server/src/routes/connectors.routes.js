@@ -15,6 +15,10 @@ function createConnectorsRouter(connectorsController) {
 
   router.post('/google/init', connectorsController.initGoogleOAuth);
 
+  router.get('/google/spreadsheets', connectorsController.getGoogleSpreadsheets);
+
+  router.post('/google/spreadsheets/finalize', connectorsController.finalizeSheetsConnection);
+
   router.get('/', connectorsController.getUserConnections);
 
   router.post('/', connectorsController.saveConnection);

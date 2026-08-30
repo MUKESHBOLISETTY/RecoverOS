@@ -45,6 +45,38 @@ export class PrismaAgentRepository extends AgentRepository {
             }
         });
     }
+
+    /**
+     * @param {string} userId
+     * @param {string} connectorId 
+     */
+    async attachCredentialToActiveAgents(userId, connectorId) {
+        return this.prisma.$transaction(async (tx) => {
+            const activeAgents = await tx.agent.findMany({
+                where: { userId, status: 'ACTIVE' },
+                select: { id: true }
+            });
+
+            const results = [];
+            for (const agent of activeAgents) {
+                const agentConnector = await tx.agentConnector.upsert({
+                    where: {
+                        agentId_connectorId: {
+                            agentId: agent.id,
+                            connectorId
+                        }
+                    },
+                    update: {},
+                    create: {
+                        agentId: agent.id,
+                        connectorId
+                    }
+                });
+                results.push(agentConnector);
+            }
+            return results;
+        });
+    }
 }
 
 export default PrismaAgentRepository;

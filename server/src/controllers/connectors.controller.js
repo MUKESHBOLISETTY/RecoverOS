@@ -4,10 +4,12 @@ class ConnectorsController {
   /**
    * @param {import('../domain/connectors/connector.manager.js').default} connectorManager 
    * @param {import('../infrastructure/connectors/google-oauth.service.js').default} googleOAuthService
+   * @param {import('../domain/agent/agent.repository.js').AgentRepository} agentRepository
    */
-  constructor(connectorManager, googleOAuthService) {
+  constructor(connectorManager, googleOAuthService, agentRepository) {
     this.connectorManager = connectorManager;
     this.googleOAuthService = googleOAuthService;
+    this.agentRepository = agentRepository;
   }
 
   getAvailableConnectors = (req, res) => {
@@ -42,6 +44,10 @@ class ConnectorsController {
         parsed.name,
         parsed.credentials
       );
+
+      if (this.agentRepository) {
+        await this.agentRepository.attachCredentialToActiveAgents(userId, connection.id);
+      }
 
       res.status(201).json({ success: true, data: connection });
     } catch (error) {
@@ -88,13 +94,13 @@ class ConnectorsController {
   initGoogleOAuth = async (req, res) => {
     try {
       const userId = req.user.id;
-      const { clientId, clientSecret, redirectUri } = req.body;
-      
+      const { clientId, clientSecret, redirectUri, connectorId = 'gmail' } = req.body;
+
       if (!clientId || !clientSecret || !redirectUri) {
         return res.status(400).json({ success: false, error: 'clientId, clientSecret, and redirectUri are required' });
       }
 
-      const authUrl = await this.googleOAuthService.generateAuthUrl(userId, clientId, clientSecret, redirectUri);
+      const authUrl = await this.googleOAuthService.generateAuthUrl(userId, clientId, clientSecret, redirectUri, connectorId);
       res.json({ success: true, url: authUrl });
     } catch (error) {
       console.error('Error initializing Google OAuth:', error);
@@ -111,9 +117,48 @@ class ConnectorsController {
       }
 
       const result = await this.googleOAuthService.handleCallback(state, code);
-      res.json({ success: true, message: result.message });
+      // Ensure gmail is attached
+      if (result.success && !result.requiresResourceSelection && this.agentRepository && result.connection) {
+        await this.agentRepository.attachCredentialToActiveAgents(result.userId, result.connection.id);
+      }
+      res.json({ success: true, ...result });
     } catch (error) {
       console.error('Error handling Google callback:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  getGoogleSpreadsheets = async (req, res) => {
+    try {
+      const { tempAuthId } = req.query;
+      if (!tempAuthId) return res.status(400).json({ success: false, error: 'tempAuthId is required' });
+
+      const spreadsheets = await this.googleOAuthService.getGoogleSpreadsheets(tempAuthId);
+      res.json({ success: true, data: spreadsheets });
+    } catch (error) {
+      console.error('Error fetching spreadsheets:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  finalizeSheetsConnection = async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { tempAuthId, spreadsheetId, worksheetName, channel } = req.body;
+
+      if (!tempAuthId || !spreadsheetId || !worksheetName) {
+        return res.status(400).json({ success: false, error: 'tempAuthId, spreadsheetId, and worksheetName are required' });
+      }
+
+      const connection = await this.googleOAuthService.finalizeSheetsConnection(userId, tempAuthId, spreadsheetId, worksheetName, channel);
+
+      if (this.agentRepository && connection) {
+        await this.agentRepository.attachCredentialToActiveAgents(userId, connection.id);
+      }
+
+      res.status(201).json({ success: true, data: connection });
+    } catch (error) {
+      console.error('Error finalizing sheets connection:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   };

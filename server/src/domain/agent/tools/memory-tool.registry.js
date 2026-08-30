@@ -98,6 +98,23 @@ export class MemoryToolRegistry extends ToolRegistryInterface {
                 }).passthrough()
             }),
             new ToolDefinition({
+                name: 'sendSms',
+                category: 'communication',
+                action: 'communication.sms',
+                requiresCapability: 'communication.sms',
+                riskLevel: 'LOW',
+                readOnly: false,
+                inputSchema: z.object({
+                    to: z.string().describe('The phone number of the customer'),
+                    body: z.string().describe('The text content of the SMS message')
+                }),
+                outputSchema: z.object({
+                    messageId: z.string(),
+                    status: z.string(),
+                    channel: z.string()
+                }).passthrough()
+            }),
+            new ToolDefinition({
                 name: 'scheduleRecovery',
                 category: 'system.internal',
                 action: 'recovery.schedule',

@@ -41,6 +41,14 @@ const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
 const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
 
 toolExecutorFactory.registerExecutor('communication.whatsapp', new WhatsAppMessageExecutor());
+
+import GoogleSheetsSimulationSink from '../src/infrastructure/google/google-sheets-simulation.sink.js';
+import SimulatedSmsProvider from '../src/domain/communication/simulated-sms.provider.js';
+import { SmsExecutor } from '../src/infrastructure/agent/executors/sms.executor.js';
+
+const simulationSink = new GoogleSheetsSimulationSink();
+const simulatedSmsProvider = new SimulatedSmsProvider(simulationSink);
+toolExecutorFactory.registerExecutor('communication.sms', new SmsExecutor(simulatedSmsProvider, connectorManager, recoveryActionRepository));
 toolExecutorFactory.registerExecutor('payment_link.create', new RazorpayLinkExecutor(connectorManager, recoveryActionRepository));
 toolExecutorFactory.registerExecutor('recovery.escalate', new EscalateRecoveryExecutor(recoveryCaseRepository, recoveryActionRepository, cacheService));
 toolExecutorFactory.registerExecutor('recovery.schedule', new ScheduleRecoveryExecutor(recoveryCaseRepository, recoveryScheduleRepository, recoveryActionRepository, outboxEventRepository, cacheService));

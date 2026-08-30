@@ -10,6 +10,14 @@ export class AgentRepository {
     async findById(id) {
         throw new Error('Method not implemented.');
     }
+
+    /**
+     * @param {string} userId 
+     * @param {string} credentialId 
+     */
+    async attachCredentialToActiveAgents(userId, credentialId) {
+        throw new Error('Method not implemented.');
+    }
 }
 
 export default AgentRepository;
