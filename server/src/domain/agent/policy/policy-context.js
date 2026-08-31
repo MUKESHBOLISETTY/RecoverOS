@@ -10,6 +10,7 @@ export class PolicyContext {
      */
     constructor(data) {
         this.maxRetry = data.maxRetry || 3;
+        this.maxContactAttempts = data.maxContactAttempts !== undefined ? data.maxContactAttempts : 3;
         this.channelLimits = data.channelLimits || {};
         this.maxDiscountPercent = data.maxDiscountPercent || 0;
         this.approvalThreshold = data.approvalThreshold || 0;

@@ -28,6 +28,13 @@ export class PrismaRecoveryActionRepository extends RecoveryActionRepository {
         const client = tx || this.prisma;
         return client.recoveryAction.create({ data });
     }
+
+    async update(id, data) {
+        return this.prisma.recoveryAction.update({
+            where: { id },
+            data
+        });
+    }
 }
 
 export default PrismaRecoveryActionRepository;

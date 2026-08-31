@@ -24,7 +24,7 @@ export class SmsExecutor extends ToolExecutorInterface {
      * @param {string} params.executionId 
      * @param {Object} params.agentData 
      */
-    async execute({ parameters, recoveryContext, executionId, activeConnection }) {
+    async execute({ parameters, recoveryContext, executionId, activeConnection, reservedActionId, idempotencyKey }) {
         const recoveryCase = recoveryContext.recoveryCase;
         if (!recoveryCase) {
             throw new Error('SmsExecutor: Missing recoveryCase in context');
@@ -60,18 +60,20 @@ export class SmsExecutor extends ToolExecutorInterface {
             recoveryCaseId: recoveryCase.id
         });
 
-        await this.recoveryActionRepository.create({
-            recoveryCaseId: recoveryCase.id,
-            type: 'SMS',
-            status: result.status,
-            payload: {
-                to: parameters.to,
-                body: parameters.body,
-                messageId: result.messageId,
-                channel: result.channel
-            },
-            idempotencyKey: `sms:${recoveryCase.id}:${executionId}`
-        });
+        if (!reservedActionId) {
+            await this.recoveryActionRepository.create({
+                recoveryCaseId: recoveryCase.id,
+                type: 'SMS',
+                status: result.status,
+                payload: {
+                    to: parameters.to,
+                    body: parameters.body,
+                    messageId: result.messageId,
+                    channel: result.channel
+                },
+                idempotencyKey: idempotencyKey || `sms:${recoveryCase.id}:${executionId}`
+            });
+        }
 
         return result;
     }

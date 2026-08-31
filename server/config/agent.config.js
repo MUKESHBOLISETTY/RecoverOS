@@ -59,6 +59,8 @@ const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
 const toolExecutionService = new ToolExecutionService(
     toolExecutorFactory,
     agentExecutionRepository,
+    recoveryCaseRepository,
+    recoveryActionRepository,
     cacheService
 );
 
@@ -79,5 +81,7 @@ const dynamicToolResolver = new DynamicToolResolver(toolRegistry);
 export const contextAssembler = new ContextAssembler(skillLoader, policyContextBuilder, dynamicToolResolver);
 
 export const agentService = new LangchainAgentService(agentGraph);
+
+export { toolExecutionService };
 
 export default agentService;

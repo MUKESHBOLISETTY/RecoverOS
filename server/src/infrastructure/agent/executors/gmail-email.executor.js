@@ -24,7 +24,7 @@ class GmailEmailExecutor extends ToolExecutor {
      * @param {string} params.executionId
      * @returns {Promise<Object>}
      */
-    async execute({ parameters, activeConnection, recoveryContext, executionId }) {
+    async execute({ parameters, activeConnection, recoveryContext, executionId, reservedActionId, idempotencyKey }) {
         const { toEmail, subject, body } = parameters;
 
         if (!activeConnection || !activeConnection.connectorId) {
@@ -92,13 +92,13 @@ class GmailEmailExecutor extends ToolExecutor {
             };
 
             const caseId = recoveryContext?.recoveryCase?.id;
-            if (caseId) {
+            if (caseId && !reservedActionId) {
                 await this.recoveryActionRepository.create({
                     recoveryCaseId: caseId,
                     type: 'EMAIL',
                     status: 'COMPLETED',
                     payload: result,
-                    idempotencyKey: `email:${caseId}:${executionId}`
+                    idempotencyKey: idempotencyKey || `email:${caseId}:${executionId}`
                 });
             }
 

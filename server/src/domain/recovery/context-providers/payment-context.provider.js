@@ -79,7 +79,8 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
             },
             recoveryHistory: {
                 contactAttempts: previousRecoveryActions.filter(a => {
-                    return !['INTERNAL_SYSTEM_ACTION', 'IN_APP'].includes(a.type);
+                    const contactTypes = ['EMAIL', 'SMS', 'WHATSAPP', 'VOICE'];
+                    return contactTypes.includes(a.type) && a.status !== 'FAILED';
                 }).length,
                 automatedRecoveryActions: previousRecoveryActions.filter(a => a.type === 'INTERNAL_SYSTEM_ACTION').length,
                 actions: previousRecoveryActions.map(a => ({

@@ -16,6 +16,7 @@ export class PolicyContextBuilder {
 
         return new PolicyContext({
             maxRetry: this._parseNumber(rules.maxRetry, 3),
+            maxContactAttempts: this._parseNumber(rules.maxContactAttempts, 3),
             channelLimits: rules.channelLimits || {},
             maxDiscountPercent: this._parseNumber(rules.maxDiscountPercent, 0),
             approvalThreshold: this._parseNumber(rules.approvalThreshold, 0),

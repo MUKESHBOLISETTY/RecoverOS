@@ -1,17 +1,25 @@
-/**
- * @typedef {import('./tool-executor.interface.js').ToolExecutorInterface} ToolExecutorInterface
- * @typedef {import('../agent-execution.repository.js').AgentExecutionRepository} AgentExecutionRepository
- */
+import { PolicyViolationError } from '../errors/policy-violation.error.js';
+import { RecoveryPolicyValidator } from '../policy/recovery-policy.validator.js';
 
 export class ToolExecutionService {
     /**
-     * @param {Object} factory
-     * @param {AgentExecutionRepository} agentExecutionRepository
-     * @param {Object} cacheService
+     * @param {Object} toolExecutorFactory
+     * @param {import('../agent-execution.repository.js').AgentExecutionRepository} agentExecutionRepository
+     * @param {import('../../db/recovery/prisma-recovery-case.repository.js').PrismaRecoveryCaseRepository} recoveryCaseRepository
+     * @param {import('../../db/agent/prisma-recovery-action.repository.js').PrismaRecoveryActionRepository} recoveryActionRepository
+     * @param {import('../../cache/base-cache.service.js').BaseCacheService} cacheService
      */
-    constructor(toolExecutorFactory, agentExecutionRepository, cacheService) {
+    constructor(
+        toolExecutorFactory,
+        agentExecutionRepository,
+        recoveryCaseRepository,
+        recoveryActionRepository,
+        cacheService
+    ) {
         this.toolExecutorFactory = toolExecutorFactory;
         this.agentExecutionRepository = agentExecutionRepository;
+        this.recoveryCaseRepository = recoveryCaseRepository;
+        this.recoveryActionRepository = recoveryActionRepository;
         this.cacheService = cacheService;
     }
 
@@ -20,40 +28,111 @@ export class ToolExecutionService {
      * @param {string} params.executionId The DB ID of the AgentExecution
      * @param {Object} params.decision
      * @param {Object} params.recoveryContext
+     * @param {Object} params.policyContext
      * @param {Object} params.activeConnection
      * @returns {Promise<Object>}
      */
-    async executeDecision({ executionId, decision, recoveryContext, activeConnection }) {
+    async executeDecision({ executionId, decision, recoveryContext, policyContext, activeConnection }) {
         if (!decision || !decision.action || decision.action === 'none') {
             console.warn(`[ToolExecutionService] No action to execute for ${executionId}`);
             return null;
         }
 
         const action = decision.action;
+        const caseId = recoveryContext?.recoveryCase?.id;
 
-        const lockKey = `agent-exec-${executionId}-${action}`;
-        const acquired = await this.cacheService.setNx(lockKey, 'locked', 60);
+        if (!caseId) {
+            throw new Error(`[ToolExecutionService] Execution ${executionId} lacks recoveryCase id.`);
+        }
+
+        const executor = this.toolExecutorFactory.getExecutor(action);
+        if (!executor) {
+            throw new Error(`[ToolExecutionService] No executor registered for action ${action}`);
+        }
+
+        const idempotencyKey = `${action}:${caseId}:${executionId}`;
+        let reservedActionId = null;
+
+        const lockKey = `lock:recovery-case-${caseId}:reservation`;
+        const acquired = await this.cacheService.setNx(lockKey, 'locked', 10); // 10s TTL
+
         if (!acquired) {
-            throw new Error(`[ToolExecutionService] Execution ${executionId} for action ${action} is currently locked or already processing.`);
+            throw new Error(`[ToolExecutionService] Case ${caseId} is currently locked by another reservation.`);
         }
 
         try {
-            const executor = this.toolExecutorFactory.getExecutor(action);
-            if (!executor) {
-                throw new Error(`[ToolExecutionService] No executor registered for action ${action}`);
-            }
+            const existingAction = await this.recoveryActionRepository.findByIdempotencyKey(idempotencyKey);
+            if (existingAction) {
+                if (existingAction.status === 'COMPLETED' || existingAction.status === 'FAILED') {
+                    reservedActionId = existingAction.id;
+                } else if (existingAction.status === 'RESERVED') {
+                    reservedActionId = existingAction.id;
+                }
+            } else {
+                const latestCase = await this.recoveryCaseRepository.findById(caseId);
+                if (!latestCase) throw new Error('RecoveryCase not found');
 
-            console.log(`[ToolExecutionService] Executing ${action} for ${executionId}...`);
-            const result = await executor.execute({
+                const allActions = await this.recoveryActionRepository.findByCase(caseId);
+
+                const validation = RecoveryPolicyValidator.validate({
+                    action,
+                    parameters: decision.parameters,
+                    policy: policyContext,
+                    recoveryCase: latestCase,
+                    recoveryActions: allActions
+                });
+
+                if (!validation.allowed) {
+                    throw new PolicyViolationError(validation);
+                }
+
+                const isContactAction = RecoveryPolicyValidator.CONTACT_ACTION_TYPES.includes(RecoveryPolicyValidator.ACTION_TYPE_MAP[action]);
+                if (isContactAction) {
+                    const newAction = await this.recoveryActionRepository.create({
+                        recoveryCaseId: caseId,
+                        type: RecoveryPolicyValidator.ACTION_TYPE_MAP[action],
+                        status: 'RESERVED',
+                        idempotencyKey,
+                        payload: { parameters: decision.parameters }
+                    });
+                    reservedActionId = newAction.id;
+                }
+            }
+        } finally {
+            await this.cacheService.del(lockKey);
+        }
+
+        console.log(`[ToolExecutionService] Executing ${action} for ${executionId}...`);
+
+        let result;
+        try {
+            result = await executor.execute({
                 parameters: decision.parameters,
                 recoveryContext,
                 activeConnection,
-                executionId
+                executionId,
+                reservedActionId, // pass down the ID for contact actions to update
+                idempotencyKey // pass down unified idempotencyKey
             });
+
+            if (reservedActionId) {
+                await this.recoveryActionRepository.update(reservedActionId, {
+                    status: 'COMPLETED',
+                    payload: result
+                });
+            }
 
             return result;
         } catch (error) {
             console.error(`[ToolExecutionService] Error executing ${action}:`, error.message);
+
+            if (reservedActionId) {
+                await this.recoveryActionRepository.update(reservedActionId, {
+                    status: 'FAILED',
+                    payload: { error: error.message, code: error.code }
+                });
+            }
+
             throw error;
         }
     }

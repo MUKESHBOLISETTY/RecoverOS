@@ -32,6 +32,7 @@ export class ToolAdapter {
                             executionId: executionContext.executionId,
                             decision: decision,
                             recoveryContext: executionContext.recoveryContext,
+                            policyContext: executionContext.policyContext,
                             activeConnection: executionContext.activeConnections?.find(
                                 conn => conn.capabilities.includes(rt.definition.requiresCapability)
                             )
@@ -39,6 +40,24 @@ export class ToolAdapter {
 
                         return JSON.stringify({ success: true, data: result });
                     } catch (error) {
+                        if (error.name === 'PolicyViolationError') {
+                            return JSON.stringify({
+                                success: false,
+                                error: {
+                                    code: error.code,
+                                    message: error.message,
+                                    policyContext: {
+                                        action: error.action,
+                                        limitType: error.limitType,
+                                        currentCount: error.currentCount,
+                                        maxAllowed: error.maxAllowed
+                                    },
+                                    retryable: false,
+                                    recoverable: true
+                                }
+                            });
+                        }
+
                         if (error.name === 'ToolExecutionError') {
                             return JSON.stringify({
                                 success: false,

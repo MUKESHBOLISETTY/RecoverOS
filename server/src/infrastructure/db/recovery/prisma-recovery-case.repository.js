@@ -72,7 +72,7 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
             await tx.recoveryAction.create({
                 data: {
                     recoveryCaseId: caseId,
-                    type: 'IN_APP',
+                    type: 'INTERNAL_SYSTEM_ACTION',
                     status: 'SUCCEEDED',
                     payload: { reason, escalatedAt: new Date().toISOString() },
                     idempotencyKey,

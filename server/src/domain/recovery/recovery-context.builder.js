@@ -63,7 +63,8 @@ export class RecoveryContextBuilder {
         }
 
         const contactAttempts = previousRecoveryActions.filter(a => {
-            return !['INTERNAL_SYSTEM_ACTION', 'IN_APP'].includes(a.type);
+            const contactTypes = ['EMAIL', 'SMS', 'WHATSAPP', 'VOICE'];
+            return contactTypes.includes(a.type) && a.status !== 'FAILED';
         }).length;
         const automatedRecoveryActions = previousRecoveryActions.filter(a => a.type === 'INTERNAL_SYSTEM_ACTION').length;
 
