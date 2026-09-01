@@ -12,23 +12,20 @@ export class RazorpayOrderRepository extends OrderRepository {
         const keyId = credentials.keyId;
         const keySecret = credentials.keySecret;
 
-        if (!keyId || !keySecret) {
-            throw new Error(
-                'RazorpayOrderRepository: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be provided either via credentials or environment variables.'
-            );
+        if (keyId && keySecret) {
+            this.razorpay = new Razorpay({
+                key_id: keyId,
+                key_secret: keySecret
+            });
+        } else {
+            this.razorpay = null;
         }
-
-        this.razorpay = new Razorpay({
-            key_id: keyId,
-            key_secret: keySecret
-        });
     }
 
-    /**
-     * @param {string} orderId 
-     * @returns {Promise<Object>}
-     */
     async findById(orderId) {
+        if (!this.razorpay) {
+            throw new Error('RazorpayOrderRepository: RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be provided to fetch orders.');
+        }
         try {
             return await this.razorpay.orders.fetch(orderId);
         } catch (error) {

@@ -3,10 +3,13 @@ export class RecoveryPolicyValidator {
         'communication.email': 'EMAIL',
         'communication.sms': 'SMS',
         'communication.whatsapp': 'WHATSAPP',
-        'communication.voice': 'VOICE'
+        'communication.voice': 'VOICE',
+        'commerce.discount.create': 'DISCOUNT'
     };
 
     static CONTACT_ACTION_TYPES = ['EMAIL', 'SMS', 'WHATSAPP', 'VOICE'];
+    
+    static TRACKED_ACTION_TYPES = [...this.CONTACT_ACTION_TYPES, 'SCHEDULE', 'DISCOUNT', 'IN_APP', 'INTERNAL_SYSTEM_ACTION'];
 
     static TERMINAL_STATES = ['RECOVERED', 'STOPPED', 'ESCALATED', 'CLOSED', 'CANCELLED'];
 
@@ -39,7 +42,19 @@ export class RecoveryPolicyValidator {
             }
         }
 
-        if (action === 'payment_link.create' && typeof parameters.discountPercent === 'number') {
+        if (action === 'commerce.discount.create' && recoveryCase) {
+            if (this.TERMINAL_STATES.includes(recoveryCase.status)) {
+                return this._reject({
+                    action,
+                    limitType: 'TERMINAL_STATE',
+                    currentCount: 0,
+                    maxAllowed: 0,
+                    reason: `Cannot create discount. Recovery case is in terminal state: ${recoveryCase.status}.`
+                });
+            }
+        }
+
+        if ((action === 'payment_link.create' || action === 'commerce.discount.create') && typeof parameters.discountPercent === 'number') {
             const maxDiscountPercent = policy.maxDiscountPercent || 0;
             if (parameters.discountPercent > maxDiscountPercent) {
                 return this._reject({

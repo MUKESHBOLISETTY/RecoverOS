@@ -14,6 +14,14 @@ export class WebhookEventRepository {
     async markFailed(source, idempotencyKey, errorMessage, tx = null) {
         throw new Error('Method not implemented.');
     }
+
+    async findLatestShopifyCheckoutUpdate(shopDomain, token, tx = null) {
+        throw new Error('Method not implemented.');
+    }
+
+    async findShopifyOrderCreateByCheckoutToken(shopDomain, checkoutToken, tx = null) {
+        throw new Error('Method not implemented.');
+    }
 }
 
 export default WebhookEventRepository;

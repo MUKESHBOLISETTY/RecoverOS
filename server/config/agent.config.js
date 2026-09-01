@@ -7,6 +7,7 @@ import { RazorpayLinkExecutor } from '../src/infrastructure/agent/executors/razo
 import { WhatsAppMessageExecutor } from '../src/infrastructure/agent/executors/whatsapp-message.executor.js';
 import { EscalateRecoveryExecutor } from '../src/infrastructure/agent/executors/escalate-recovery.executor.js';
 import { ScheduleRecoveryExecutor } from '../src/infrastructure/agent/executors/schedule-recovery.executor.js';
+import { ShopifyDiscountExecutor } from '../src/infrastructure/agent/executors/shopify-discount.executor.js';
 
 import ToolExecutionService from '../src/domain/agent/tools/tool-execution.service.js';
 import PrismaAgentExecutionRepository from '../src/infrastructure/db/agent/prisma-agent-execution.repository.js';
@@ -53,6 +54,11 @@ toolExecutorFactory.registerExecutor('communication.sms', new SmsExecutor(simula
 toolExecutorFactory.registerExecutor('payment_link.create', new RazorpayLinkExecutor(connectorManager, recoveryActionRepository));
 toolExecutorFactory.registerExecutor('recovery.escalate', new EscalateRecoveryExecutor(recoveryCaseRepository, recoveryActionRepository, cacheService));
 toolExecutorFactory.registerExecutor('recovery.schedule', new ScheduleRecoveryExecutor(recoveryCaseRepository, recoveryScheduleRepository, recoveryActionRepository, outboxEventRepository, cacheService));
+
+import PrismaWebhookEventRepository from '../src/infrastructure/db/webhook/prisma-webhook-event.repository.js';
+const webhookEventRepository = new PrismaWebhookEventRepository(prisma);
+
+toolExecutorFactory.registerExecutor('commerce.discount.create', new ShopifyDiscountExecutor(webhookEventRepository));
 
 const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
 

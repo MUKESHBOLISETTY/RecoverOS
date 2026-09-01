@@ -47,6 +47,19 @@ class ConnectorManager {
   }
 
   /**
+   * @param {string} id
+   * @param {Object} rawCredentials
+   */
+  async updateConnection(id, rawCredentials) {
+    const { encryptedData, iv, authTag } = this.encryptionService.encrypt(rawCredentials);
+    await this.credentialRepository.update(id, { encryptedData, iv, authTag });
+    
+    if (this.cacheService) {
+      await this.cacheService.del(`connector_credential:${id}`);
+    }
+  }
+
+  /**
    * @param {string} userId 
    */
   async getUserConnections(userId) {

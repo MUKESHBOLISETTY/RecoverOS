@@ -5,7 +5,8 @@ export class SkillSelector {
          */
         this.eventMap = { //static mapping for testing
             'payment.failed': 'payment_failure_recovery',
-            'payment.downtime.resolved': 'payment_failure_recovery'
+            'payment.downtime.resolved': 'payment_failure_recovery',
+            'checkout.abandoned': 'cart_abandonment_recovery'
         };
     }
 

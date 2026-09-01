@@ -40,6 +40,34 @@ export class PrismaWebhookEventRepository extends WebhookEventRepository {
             }
         });
     }
+
+    async findLatestShopifyCheckoutUpdate(shopDomain, token, tx = null) {
+        const client = tx || this.prisma;
+        const results = await client.$queryRaw`
+            SELECT * FROM "WebhookEvent"
+            WHERE "source" = 'SHOPIFY'
+              AND "eventType" = 'checkouts/update'
+              AND payload->>'token' = ${token}
+              AND payload->'_shopifyHeaders'->>'shopDomain' = ${shopDomain}
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+        `;
+        return results.length > 0 ? results[0] : null;
+    }
+
+    async findShopifyOrderCreateByCheckoutToken(shopDomain, checkoutToken, tx = null) {
+        const client = tx || this.prisma;
+        const results = await client.$queryRaw`
+            SELECT * FROM "WebhookEvent"
+            WHERE "source" = 'SHOPIFY'
+              AND "eventType" = 'orders/create'
+              AND payload->>'checkout_token' = ${checkoutToken}
+              AND payload->'_shopifyHeaders'->>'shopDomain' = ${shopDomain}
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+        `;
+        return results.length > 0 ? results[0] : null;
+    }
 }
 
 export default PrismaWebhookEventRepository;

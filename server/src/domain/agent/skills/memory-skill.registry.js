@@ -72,6 +72,42 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
             ]
         });
 
+        this.skills.set(recoveryReEvaluation.id, recoveryReEvaluation);
+
+        const cartAbandonmentRecovery = new Skill({
+            id: 'cart_abandonment_recovery',
+            version: 1,
+            purpose: 'Recover abandoned checkout sessions via customer communication.',
+            supportedEvents: [
+                'checkout.abandoned',
+                'recovery.schedule'
+            ],
+            requiredContext: [
+                'checkout',
+                'customer',
+                'recoveryHistory'
+            ],
+            toolCategories: [
+                'communication',
+                'system.internal',
+                'commerce.discount'
+            ],
+            instructions: [
+                'Choose the most appropriate available communication channel based on customer context.',
+                'Personalize messages using customer name and cart contents.',
+                'Include the Shopify checkout recovery URL provided in the context. Do not modify it.',
+                'Do not assume email is the only option; use SMS or WhatsApp if more appropriate or if it is the only channel available.',
+                'If the case is RECOVERED, make no customer communication attempt.',
+                'The agent MAY consider offering a discount when it is appropriate to improve conversion. Consider engagement, cart value, and history.',
+                'If a discount is requested, propose an appropriate percentage. The maximum discount limit is enforced by the system, so if the discount tool rejects the request, adapt the response appropriately without retrying with an unauthorized percentage or fabricating a code.',
+                'When the discount tool succeeds, it returns a discount code. Use that exact discount code in your subsequent communication tool call.',
+                'Never fabricate a discount code, and never generate Razorpay payment links.',
+                'Escalate to human review only if customer context indicates it is strictly necessary.'
+            ]
+        });
+
+        this.skills.set(cartAbandonmentRecovery.id, cartAbandonmentRecovery);
+
     }
 
     /**

@@ -33,8 +33,8 @@ export class TriggerContextResolver {
 
     /**
      * @param {Object} execution - The AgentExecution record
-     * @param {Object} agentConfig - The agent configuration
-     * @param {Array<string>} availableCapabilities - List of capabilities
+     * @param {Object} agentConfig
+     * @param {Array<string>} availableCapabilities
      * @param {Object} credentials - Optional credentials map
      * @returns {Promise<Object>} fullContext
      */
@@ -53,10 +53,10 @@ export class TriggerContextResolver {
             if (!recoveryCase) {
                 throw new Error(`[TriggerContextResolver] RecoveryCase ${recoveryCaseId} not found`);
             }
-        } else if (triggerType.startsWith('payment.')) {
-            const paymentId = inputContext?.paymentId || inputContext?.subject?.id;
-            if (!paymentId) {
-                throw new Error(`[TriggerContextResolver] paymentId missing from inputContext for event ${triggerType}`);
+        } else if (triggerType.startsWith('payment.') || triggerType === 'checkout.abandoned') {
+            const subjectId = inputContext?.paymentId || inputContext?.checkoutToken || inputContext?.subject?.id;
+            if (!subjectId) {
+                throw new Error(`[TriggerContextResolver] subjectId missing from inputContext for event ${triggerType}`);
             }
 
             const recoveryCaseId = inputContext?.recoveryCaseId;
@@ -80,11 +80,14 @@ export class TriggerContextResolver {
                     }
                 }
 
+                const type = triggerType === 'checkout.abandoned' ? 'CART_ABANDONMENT' : 'PAYMENT_FAILURE';
+                const subjectType = triggerType === 'checkout.abandoned' ? 'CHECKOUT' : 'PAYMENT';
+
                 recoveryCase = await this.recoveryCaseService.getOrCreateCase({
-                    type: 'PAYMENT_FAILURE',
-                    identity: { paymentId },
-                    subjectType: 'PAYMENT',
-                    subjectId: paymentId,
+                    type,
+                    identity: { [subjectType === 'PAYMENT' ? 'paymentId' : 'cartId']: subjectId },
+                    subjectType,
+                    subjectId,
                     activeSkillId,
                     activeSkillVersion
                 });

@@ -26,6 +26,26 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
     }
 
     /**
+     * @param {string} shopDomain
+     * @param {string} checkoutToken
+     * @returns {Promise<Object|null>}
+     */
+    async findShopifyAbandonmentCase(shopDomain, checkoutToken) {
+        return this.prisma.recoveryCase.findFirst({
+            where: {
+                type: 'CART_ABANDONMENT',
+                subjectType: 'CHECKOUT',
+                subjectId: checkoutToken,
+                contextSnapshot: {
+                    path: ['shopDomain'],
+                    equals: shopDomain
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+    }
+
+    /**
      * @param {string} id
      * @returns {Promise<Object|null>}
      */

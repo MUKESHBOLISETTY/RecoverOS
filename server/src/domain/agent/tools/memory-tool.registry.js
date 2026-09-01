@@ -143,6 +143,25 @@ export class MemoryToolRegistry extends ToolRegistryInterface {
                 outputSchema: z.object({
                     status: z.string()
                 }).passthrough()
+            }),
+            new ToolDefinition({
+                name: 'createDiscountCode',
+                category: 'commerce.discount',
+                action: 'commerce.discount.create',
+                requiresCapability: 'commerce.discount.create',
+                riskLevel: 'MEDIUM',
+                readOnly: false,
+                inputSchema: z.object({
+                    discountPercent: z.number().describe('The percentage discount to offer, between 0 and 100.'),
+                    validHours: z.number().describe('The number of hours the discount code should be valid for.')
+                }),
+                outputSchema: z.object({
+                    success: z.boolean(),
+                    discountId: z.string(),
+                    discountCode: z.string(),
+                    discountPercent: z.number(),
+                    expiresAt: z.string()
+                }).passthrough()
             })
         ];
 

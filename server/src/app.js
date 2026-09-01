@@ -7,17 +7,14 @@ import createWebhookRouter from './routes/webhook.routes.js';
 import createAuthRouter from './routes/auth.routes.js';
 import { connectorsRouter, connectorManager } from '../config/connectors.config.js';
 import { connectDB } from '../config/database.config.js';
-import { connectRedis, idempotencyStore, webhookEventQueueService } from '../config/redis.config.js';
+import { connectRedis, idempotencyStore, webhookEventQueueService, webhookEventRepository } from '../config/redis.config.js';
 import { WebhookController } from './controllers/webhook.controller.js';
+import { ShopifyWebhookController } from './controllers/shopify-webhook.controller.js';
 import { authController } from '../config/auth.config.js';
 
 const app = express();
 connectDB();
 connectRedis();
-
-app.use(express.json());
-app.use(cookieParser());
-
 app.use(helmet());
 
 const corsoptions = {
@@ -29,8 +26,14 @@ app.use(cors(corsoptions));
 app.set('trust proxy', 1);
 
 const webhookController = new WebhookController(idempotencyStore, webhookEventQueueService, connectorManager);
+const shopifyWebhookController = new ShopifyWebhookController(idempotencyStore, webhookEventQueueService, connectorManager, webhookEventRepository);
 const webhookRoutes = createWebhookRouter(webhookController);
 const authRoutes = createAuthRouter(authController);
+
+app.post('/webhooks/shopify', express.raw({ type: 'application/json' }), shopifyWebhookController.ingestEvent);
+
+app.use(express.json());
+app.use(cookieParser());
 
 app.use('/webhooks', webhookRoutes);
 app.use('/auth', authRoutes);

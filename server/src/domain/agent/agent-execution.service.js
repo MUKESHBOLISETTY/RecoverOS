@@ -44,9 +44,9 @@ export class AgentExecutionService {
 
             return await this.executionRepository.create(data);
         } catch (error) {
-            if (error instanceof DuplicateExecutionError && input.eventId) {
+            if (error instanceof DuplicateExecutionError && input.triggerId) {
                 console.log(`[AgentExecutionService] ${error.message}`);
-                const existing = await this.executionRepository.findByAgentAndEvent(input.agent.id, input.eventId);
+                const existing = await this.executionRepository.findByAgentAndEvent(input.agent.id, input.triggerType, input.triggerId);
                 if (!existing) {
                     throw new Error(`Unique constraint violation but record not found: ${error.message}`);
                 }

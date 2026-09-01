@@ -23,6 +23,14 @@ class ConnectorCredentialRepository {
 
   /**
    * @param {string} connectorId 
+   * @param {string} name 
+   */
+  async findByConnectorAndName(connectorId, name) {
+    throw new Error('Method not implemented.');
+  }
+
+  /**
+   * @param {string} connectorId 
    * @returns {Promise<Array<{id: string, userId: string, connectorId: string}>>}
    */
   async findIdsByConnectorId(connectorId) {
@@ -55,6 +63,17 @@ class ConnectorCredentialRepository {
    * @param {string} userId 
    */
   async delete(id, userId) {
+    throw new Error('Method not implemented.');
+  }
+
+  /**
+   * @param {string} id
+   * @param {Object} data
+   * @param {string} data.encryptedData
+   * @param {string} data.iv
+   * @param {string} data.authTag
+   */
+  async update(id, data) {
     throw new Error('Method not implemented.');
   }
 }

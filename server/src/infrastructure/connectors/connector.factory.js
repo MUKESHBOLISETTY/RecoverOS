@@ -1,6 +1,7 @@
 import RazorpayConnector from './razorpay-connector.js';
 import GmailConnector from './gmail-connector.js';
 import GoogleSheetsConnector from './google-sheets.connector.js';
+import ShopifyConnector from './shopify-connector.js';
 
 class ConnectorFactory {
   constructor() {
@@ -15,6 +16,9 @@ class ConnectorFactory {
 
     const sheets = new GoogleSheetsConnector();
     this.connectors.set(sheets.getMetadata().id, sheets);
+
+    const shopify = new ShopifyConnector();
+    this.connectors.set(shopify.getMetadata().id, shopify);
   }
 
   /**

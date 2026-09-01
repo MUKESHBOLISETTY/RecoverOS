@@ -27,6 +27,12 @@ class PrismaConnectorCredentialRepository extends ConnectorCredentialRepository 
     });
   }
 
+  async findByConnectorAndName(connectorId, name) {
+    return this.prisma.connectorCredential.findFirst({
+      where: { connectorId, name }
+    });
+  }
+
   async findIdsByConnectorId(connectorId) {
     return this.prisma.connectorCredential.findMany({
       where: { connectorId },
@@ -62,6 +68,17 @@ class PrismaConnectorCredentialRepository extends ConnectorCredentialRepository 
   async delete(id, userId) {
     return this.prisma.connectorCredential.deleteMany({
       where: { id, userId }
+    });
+  }
+
+  async update(id, data) {
+    return this.prisma.connectorCredential.update({
+      where: { id },
+      data: {
+        encryptedData: data.encryptedData,
+        iv: data.iv,
+        authTag: data.authTag
+      }
     });
   }
 }

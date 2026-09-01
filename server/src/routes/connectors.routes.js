@@ -9,11 +9,15 @@ function createConnectorsRouter(connectorsController) {
 
   router.get('/google/callback', connectorsController.handleGoogleCallback);
 
+  router.get('/shopify/callback', connectorsController.handleShopifyCallback);
+
   router.use(authenticateUser);
 
   router.get('/available', connectorsController.getAvailableConnectors);
 
   router.post('/google/init', connectorsController.initGoogleOAuth);
+
+  router.post('/shopify/init', connectorsController.initShopifyOAuth);
 
   router.get('/google/spreadsheets', connectorsController.getGoogleSpreadsheets);
 

@@ -63,7 +63,10 @@ export class ToolExecutionService {
         try {
             const existingAction = await this.recoveryActionRepository.findByIdempotencyKey(idempotencyKey);
             if (existingAction) {
-                if (existingAction.status === 'COMPLETED' || existingAction.status === 'FAILED') {
+                if (existingAction.status === 'COMPLETED') {
+                    console.log(`[ToolExecutionService] Action ${idempotencyKey} is already COMPLETED. Returning cached result to prevent duplicate side-effect.`);
+                    return existingAction.payload;
+                } else if (existingAction.status === 'FAILED') {
                     reservedActionId = existingAction.id;
                 } else if (existingAction.status === 'RESERVED') {
                     reservedActionId = existingAction.id;
@@ -86,11 +89,12 @@ export class ToolExecutionService {
                     throw new PolicyViolationError(validation);
                 }
 
-                const isContactAction = RecoveryPolicyValidator.CONTACT_ACTION_TYPES.includes(RecoveryPolicyValidator.ACTION_TYPE_MAP[action]);
-                if (isContactAction) {
+                const actionType = RecoveryPolicyValidator.ACTION_TYPE_MAP[action];
+                const isTrackedAction = actionType && RecoveryPolicyValidator.TRACKED_ACTION_TYPES.includes(actionType);
+                if (isTrackedAction) {
                     const newAction = await this.recoveryActionRepository.create({
                         recoveryCaseId: caseId,
-                        type: RecoveryPolicyValidator.ACTION_TYPE_MAP[action],
+                        type: actionType,
                         status: 'RESERVED',
                         idempotencyKey,
                         payload: { parameters: decision.parameters }

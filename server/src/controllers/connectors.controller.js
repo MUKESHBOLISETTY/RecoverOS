@@ -5,11 +5,13 @@ class ConnectorsController {
    * @param {import('../domain/connectors/connector.manager.js').default} connectorManager 
    * @param {import('../infrastructure/connectors/google-oauth.service.js').default} googleOAuthService
    * @param {import('../domain/agent/agent.repository.js').AgentRepository} agentRepository
+   * @param {import('../infrastructure/connectors/shopify-oauth.service.js').default} shopifyOAuthService
    */
-  constructor(connectorManager, googleOAuthService, agentRepository) {
+  constructor(connectorManager, googleOAuthService, agentRepository, shopifyOAuthService) {
     this.connectorManager = connectorManager;
     this.googleOAuthService = googleOAuthService;
     this.agentRepository = agentRepository;
+    this.shopifyOAuthService = shopifyOAuthService;
   }
 
   getAvailableConnectors = (req, res) => {
@@ -159,6 +161,45 @@ class ConnectorsController {
       res.status(201).json({ success: true, data: connection });
     } catch (error) {
       console.error('Error finalizing sheets connection:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  initShopifyOAuth = async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { clientId, clientSecret, redirectUri, shopDomain } = req.body;
+
+      if (!clientId || !clientSecret || !redirectUri || !shopDomain) {
+        return res.status(400).json({ success: false, error: 'clientId, clientSecret, redirectUri, and shopDomain are required' });
+      }
+
+      const authUrl = await this.shopifyOAuthService.generateAuthUrl(userId, clientId, clientSecret, redirectUri, shopDomain);
+      res.json({ success: true, url: authUrl });
+    } catch (error) {
+      console.error('Error initializing Shopify OAuth:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  handleShopifyCallback = async (req, res) => {
+    try {
+      const { state, code, shop } = req.query;
+
+      if (!state || !code || !shop) {
+        return res.status(400).json({ success: false, error: 'Missing state, code, or shop' });
+      }
+
+      const result = await this.shopifyOAuthService.handleCallback(state, code, shop);
+
+      if (result.success && this.agentRepository && result.connection && !result.isReconnect) {
+        await this.agentRepository.attachCredentialToActiveAgents(result.userId, result.connection.id);
+      }
+
+      const { isReconnect, userId, ...publicResult } = result;
+      res.json(publicResult);
+    } catch (error) {
+      console.error('Error handling Shopify callback:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   };

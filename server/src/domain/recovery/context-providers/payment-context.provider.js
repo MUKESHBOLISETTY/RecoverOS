@@ -5,21 +5,21 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
     /**
      * @param {import('../../../infrastructure/db/payment/prisma-payment.repository.js').PrismaPaymentRepository} paymentRepository
      * @param {import('../../../infrastructure/db/correlation/prisma-payment-failure-correlation.repository.js').PrismaPaymentFailureCorrelationRepository} correlationRepository
-     * @param {import('../../../infrastructure/db/agent/prisma-recovery-action.repository.js').PrismaRecoveryActionRepository} recoveryActionRepository
+     * @param {import('../recovery-history.builder.js').RecoveryHistoryBuilder} recoveryHistoryBuilder
      * @param {import('../failure-diagnosis.service.js').FailureDiagnosisService} failureDiagnosisService
      * @param {import('../order-context.service.js').OrderContextService} orderContextService
      */
     constructor(
         paymentRepository,
         correlationRepository,
-        recoveryActionRepository,
+        recoveryHistoryBuilder,
         failureDiagnosisService,
         orderContextService
     ) {
         super();
         this.paymentRepository = paymentRepository;
         this.correlationRepository = correlationRepository;
-        this.recoveryActionRepository = recoveryActionRepository;
+        this.recoveryHistoryBuilder = recoveryHistoryBuilder;
         this.failureDiagnosisService = failureDiagnosisService;
         this.orderContextService = orderContextService;
     }
@@ -31,7 +31,7 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
         if (!payment) throw new Error(`[PaymentContextProvider] Payment ${subjectId} not found`);
 
         const downtimeCorrelation = await this.correlationRepository.findFirstByPaymentId(payment.id);
-        const previousRecoveryActions = await this.recoveryActionRepository.findByCase(recoveryCase.id);
+        const recoveryHistory = await this.recoveryHistoryBuilder.buildHistory(recoveryCase.id);
 
         let failure = null;
         if (execution.triggerType === 'payment.failed') {
@@ -44,14 +44,6 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
         }
 
         let agentPolicy = null;
-        if (agentConfig) {
-            agentPolicy = {
-                rules: agentConfig.rules || [],
-                actions: agentConfig.actions || [],
-                stopConditions: agentConfig.stopConditions || [],
-                purpose: agentConfig.purpose || ''
-            };
-        }
 
         const paymentData = payment ? {
             ...payment,
@@ -77,19 +69,7 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
                 activeSkillId: recoveryCase.activeSkillId || null,
                 activeSkillVersion: recoveryCase.activeSkillVersion || null
             },
-            recoveryHistory: {
-                contactAttempts: previousRecoveryActions.filter(a => {
-                    const contactTypes = ['EMAIL', 'SMS', 'WHATSAPP', 'VOICE'];
-                    return contactTypes.includes(a.type) && a.status !== 'FAILED';
-                }).length,
-                automatedRecoveryActions: previousRecoveryActions.filter(a => a.type === 'INTERNAL_SYSTEM_ACTION').length,
-                actions: previousRecoveryActions.map(a => ({
-                    action: a.type,
-                    status: a.status,
-                    payload: a.payload || null,
-                    occurredAt: a.createdAt
-                }))
-            },
+            recoveryHistory,
             customerHistory: {},
             agentPolicy,
             availableCapabilities: availableCapabilities || []

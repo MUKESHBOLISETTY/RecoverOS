@@ -232,6 +232,7 @@ enum RecoveryActionType {
   VOICE
   IN_APP
   INTERNAL_SYSTEM_ACTION
+  DISCOUNT
 }
 
 model RecoveryAction {
