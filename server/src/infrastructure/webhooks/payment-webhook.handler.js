@@ -15,6 +15,9 @@ import { PrismaPaymentRepository } from "../db/payment/prisma-payment.repository
 import { PrismaRecoveryCaseRepository } from "../db/recovery/prisma-recovery-case.repository.js";
 import { PrismaPaymentDowntimeRepository } from "../db/correlation/prisma-payment-downtime.repository.js";
 import { PrismaPaymentFailureCorrelationRepository } from "../db/correlation/prisma-payment-failure-correlation.repository.js";
+import { PaymentRecoveryService } from "../../domain/payment/payment-recovery.service.js";
+import { PaymentStabilizationQueue } from "../queue/payment-stabilization.queue.js";
+import { redisConnectionManager } from "../../../config/redis.config.js";
 
 export class PaymentWebhookHandler extends BaseWebhookHandler {
     constructor() {
@@ -113,37 +116,14 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
         if (userId) {
             if (eventType === 'payment.failed') {
                 await correlationEngine.correlatePaymentFailure(payment);
+
+                const stabilizationQueue = new PaymentStabilizationQueue();
+                const paymentRecoveryService = new PaymentRecoveryService(recoveryCaseRepository, cacheService, stabilizationQueue);
+
+                return paymentRecoveryService.handlePaymentFailed(payment, webhook);
             }
 
             const triggeredAgents = await agentTriggerService.evaluateTriggers(userId, eventType, body);
-
-            let executionRecoveryCaseId = null;
-            if (eventType === 'payment.failed') {
-                const suppliedRecoveryCaseId = entity.notes?.recoveryCaseId || null;
-
-                if (recoveryCaseCorrelationService) {
-                    const outcome = await recoveryCaseCorrelationService.evaluateCorrelation({
-                        suppliedRecoveryCaseId,
-                        eventType,
-                        userId,
-                        connectionId: connection ? connection.id : null,
-                        provider
-                    });
-
-                    console.log(`[RecoveryCorrelation] event=payment.failed paymentId=${payment.id} recoveryCaseId=${outcome.recoveryCaseId} source=${suppliedRecoveryCaseId ? 'provider_metadata' : 'new_case'} decision=${outcome.decision}`);
-
-                    if (outcome.decision === 'REJECT_INVALID' || outcome.decision === 'REJECT_UNAUTHORIZED' || outcome.decision === 'IGNORE_TERMINAL') {
-                        return { status: 'skipped', reason: outcome.reason };
-                    }
-
-                    if (outcome.decision === 'REUSE') {
-                        executionRecoveryCaseId = outcome.recoveryCaseId;
-                    }
-                } else {
-                    executionRecoveryCaseId = suppliedRecoveryCaseId;
-                }
-            }
-
             for (const agent of triggeredAgents) {
                 try {
                     const execution = await agentExecutionService.createExecution({
@@ -156,8 +136,7 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                         provider,
                         inputContext: {
                             paymentId: payment.id,
-                            body,
-                            ...(executionRecoveryCaseId ? { recoveryCaseId: executionRecoveryCaseId } : {})
+                            body
                         }
                     });
 

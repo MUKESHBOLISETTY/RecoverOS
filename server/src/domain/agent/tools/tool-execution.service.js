@@ -32,7 +32,7 @@ export class ToolExecutionService {
      * @param {Object} params.activeConnection
      * @returns {Promise<Object>}
      */
-    async executeDecision({ executionId, decision, recoveryContext, policyContext, activeConnection }) {
+    async executeDecision({ executionId, decision, recoveryContext, policyContext, activeConnection, activeConnections }) {
         if (!decision || !decision.action || decision.action === 'none') {
             console.warn(`[ToolExecutionService] No action to execute for ${executionId}`);
             return null;
@@ -76,13 +76,15 @@ export class ToolExecutionService {
                 if (!latestCase) throw new Error('RecoveryCase not found');
 
                 const allActions = await this.recoveryActionRepository.findByCase(caseId);
+                const verificationResult = latestCase.contextSnapshot?.verificationResult || null;
 
                 const validation = RecoveryPolicyValidator.validate({
                     action,
                     parameters: decision.parameters,
                     policy: policyContext,
                     recoveryCase: latestCase,
-                    recoveryActions: allActions
+                    recoveryActions: allActions,
+                    verificationResult
                 });
 
                 if (!validation.allowed) {
@@ -114,9 +116,10 @@ export class ToolExecutionService {
                 parameters: decision.parameters,
                 recoveryContext,
                 activeConnection,
+                activeConnections,
                 executionId,
-                reservedActionId, // pass down the ID for contact actions to update
-                idempotencyKey // pass down unified idempotencyKey
+                reservedActionId, //ID for contact actions to update
+                idempotencyKey
             });
 
             if (reservedActionId) {

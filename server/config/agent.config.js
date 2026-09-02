@@ -58,7 +58,7 @@ toolExecutorFactory.registerExecutor('recovery.schedule', new ScheduleRecoveryEx
 import PrismaWebhookEventRepository from '../src/infrastructure/db/webhook/prisma-webhook-event.repository.js';
 const webhookEventRepository = new PrismaWebhookEventRepository(prisma);
 
-toolExecutorFactory.registerExecutor('commerce.discount.create', new ShopifyDiscountExecutor(webhookEventRepository));
+toolExecutorFactory.registerExecutor('commerce.discount.create', new ShopifyDiscountExecutor(webhookEventRepository, connectorManager));
 
 const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
 

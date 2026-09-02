@@ -1,13 +1,16 @@
 import { ToolExecutorInterface } from '../../../domain/agent/tools/tool-executor.interface.js';
 
 export class ShopifyDiscountExecutor extends ToolExecutorInterface {
-  constructor(webhookEventRepository) {
+  constructor(webhookEventRepository, connectorManager) {
     super();
     this.webhookEventRepository = webhookEventRepository;
+    this.connectorManager = connectorManager;
   }
 
-  async execute({ parameters, recoveryContext, activeConnection, idempotencyKey }) {
-    if (!activeConnection || !activeConnection.accessToken) {
+  async execute({ parameters, recoveryContext, activeConnection, activeConnections, idempotencyKey }) {
+    const candidates = activeConnections && activeConnections.length > 0 ? activeConnections : (activeConnection ? [activeConnection] : []);
+
+    if (candidates.length === 0) {
       throw new Error('No active Shopify connection available');
     }
 
@@ -17,6 +20,19 @@ export class ShopifyDiscountExecutor extends ToolExecutorInterface {
 
     if (!shopDomain || !checkoutToken || !caseId) {
       throw new Error('Missing required recoveryContext parameters for ShopifyDiscountExecutor');
+    }
+
+    let accessToken = null;
+    for (const conn of candidates) {
+        const creds = await this.connectorManager.getDecryptedCredentialsById(conn.connectorId);
+        if (creds && creds.shopDomain === shopDomain) {
+            accessToken = creds.accessToken;
+            break;
+        }
+    }
+
+    if (!accessToken) {
+        throw new Error(`No matching Shopify connection found for domain ${shopDomain}`);
     }
 
     const discountPercent = parameters.discountPercent;
@@ -107,7 +123,7 @@ export class ShopifyDiscountExecutor extends ToolExecutorInterface {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': activeConnection.accessToken,
+        'X-Shopify-Access-Token': accessToken,
         'Accept': 'application/json'
       },
       body: JSON.stringify({ query: mutation, variables })
@@ -142,7 +158,7 @@ export class ShopifyDiscountExecutor extends ToolExecutorInterface {
     );
 
     if (hasAlreadyExistsError) {
-      return await this._handleIdempotencyLookup(graphqlEndpoint, activeConnection.accessToken, code, caseId, discountPercent, endsAt);
+      return await this._handleIdempotencyLookup(graphqlEndpoint, accessToken, code, caseId, discountPercent, endsAt);
     }
 
     if (userErrors.length > 0) {
@@ -185,7 +201,7 @@ export class ShopifyDiscountExecutor extends ToolExecutorInterface {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': activeConnection.accessToken,
+        'X-Shopify-Access-Token': accessToken,
         'Accept': 'application/json'
       },
       body: JSON.stringify({ query: metafieldMutation, variables: mfVariables })

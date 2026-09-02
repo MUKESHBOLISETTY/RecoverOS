@@ -28,14 +28,17 @@ export class ToolAdapter {
                     };
 
                     try {
+                        const matchingConnections = executionContext.activeConnections?.filter(
+                            conn => conn.capabilities.includes(rt.definition.requiresCapability)
+                        );
+
                         const result = await this.toolExecutionService.executeDecision({
                             executionId: executionContext.executionId,
                             decision: decision,
                             recoveryContext: executionContext.recoveryContext,
                             policyContext: executionContext.policyContext,
-                            activeConnection: executionContext.activeConnections?.find(
-                                conn => conn.capabilities.includes(rt.definition.requiresCapability)
-                            )
+                            activeConnection: matchingConnections?.[0],
+                            activeConnections: matchingConnections
                         });
 
                         return JSON.stringify({ success: true, data: result });

@@ -22,6 +22,10 @@ export class WebhookEventRepository {
     async findShopifyOrderCreateByCheckoutToken(shopDomain, checkoutToken, tx = null) {
         throw new Error('Method not implemented.');
     }
+
+    async findShopifyOrderCreateByCartToken(shopDomain, cartToken, tx = null) {
+        throw new Error('Method not implemented.');
+    }
 }
 
 export default WebhookEventRepository;

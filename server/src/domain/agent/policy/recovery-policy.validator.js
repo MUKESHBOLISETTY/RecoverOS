@@ -8,7 +8,7 @@ export class RecoveryPolicyValidator {
     };
 
     static CONTACT_ACTION_TYPES = ['EMAIL', 'SMS', 'WHATSAPP', 'VOICE'];
-    
+
     static TRACKED_ACTION_TYPES = [...this.CONTACT_ACTION_TYPES, 'SCHEDULE', 'DISCOUNT', 'IN_APP', 'INTERNAL_SYSTEM_ACTION'];
 
     static TERMINAL_STATES = ['RECOVERED', 'STOPPED', 'ESCALATED', 'CLOSED', 'CANCELLED'];
@@ -22,7 +22,20 @@ export class RecoveryPolicyValidator {
      * @param {Array} params.recoveryActions
      * @returns {Object} { allowed: true } or { allowed: false, code, action, limitType, currentCount, maxAllowed, reason }
      */
-    static validate({ action, parameters = {}, policy, recoveryCase, recoveryActions = [] }) {
+    static validate({ action, parameters = {}, policy, recoveryCase, recoveryActions = [], verificationResult = null }) {
+        if (verificationResult) {
+            const { allowedActions, blockedActions } = this.getAllowedActionsFromVerification(verificationResult);
+            if (blockedActions.includes(action)) {
+                return this._reject({
+                    action,
+                    limitType: 'VERIFICATION_STATE',
+                    currentCount: 0,
+                    maxAllowed: 0,
+                    reason: `Action ${action} is blocked because recovery case is in verification state: ${verificationResult.state}.`
+                });
+            }
+        }
+
         if (!policy) {
             return { allowed: true };
         }
@@ -109,6 +122,44 @@ export class RecoveryPolicyValidator {
             code: 'POLICY_LIMIT_EXCEEDED',
             ...details
         };
+    }
+
+    /**
+     * @param {Object} verificationResult 
+     * @returns {{ allowedActions: string[], blockedActions: string[] }}
+     */
+    static getAllowedActionsFromVerification(verificationResult) {
+        if (!verificationResult) return { allowedActions: [], blockedActions: [] };
+
+        const state = verificationResult.state;
+        const blockedActions = [];
+        const allowedActions = [];
+
+        if (state === 'UNKNOWN') {
+            blockedActions.push(
+                'communication.email',
+                'communication.sms',
+                'communication.whatsapp',
+                'communication.voice',
+                'recovery.schedule',
+                'payment_link.create',
+                'payment.retry',
+                'commerce.discount.create'
+            );
+        } else if (state === 'RECOVERED' || state === 'BLOCKED') {
+            blockedActions.push(
+                'communication.email',
+                'communication.sms',
+                'communication.whatsapp',
+                'communication.voice',
+                'recovery.schedule',
+                'payment_link.create',
+                'payment.retry',
+                'commerce.discount.create'
+            );
+        }
+
+        return { allowedActions, blockedActions };
     }
 }
 

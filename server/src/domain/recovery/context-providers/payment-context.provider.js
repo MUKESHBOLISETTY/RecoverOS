@@ -8,13 +8,15 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
      * @param {import('../recovery-history.builder.js').RecoveryHistoryBuilder} recoveryHistoryBuilder
      * @param {import('../failure-diagnosis.service.js').FailureDiagnosisService} failureDiagnosisService
      * @param {import('../order-context.service.js').OrderContextService} orderContextService
+     * @param {import('../../connectors/connector.manager.js').default} connectorManager
      */
     constructor(
         paymentRepository,
         correlationRepository,
         recoveryHistoryBuilder,
         failureDiagnosisService,
-        orderContextService
+        orderContextService,
+        connectorManager
     ) {
         super();
         this.paymentRepository = paymentRepository;
@@ -22,6 +24,7 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
         this.recoveryHistoryBuilder = recoveryHistoryBuilder;
         this.failureDiagnosisService = failureDiagnosisService;
         this.orderContextService = orderContextService;
+        this.connectorManager = connectorManager;
     }
 
     async buildContext(params) {
@@ -33,9 +36,22 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
         const downtimeCorrelation = await this.correlationRepository.findFirstByPaymentId(payment.id);
         const recoveryHistory = await this.recoveryHistoryBuilder.buildHistory(recoveryCase.id);
 
+        let provider = execution.provider;
+        if (!provider && payment.connectionId && this.connectorManager) {
+            try {
+                const credentials = await this.connectorManager.getDecryptedCredentialsById(payment.connectionId);
+                if (credentials) {
+                    const record = await this.connectorManager.credentialRepository.findById(payment.connectionId);
+                    provider = record?.connectorId;
+                }
+            } catch (err) {
+                console.warn(`[PaymentContextProvider] Failed to resolve provider for connection ${payment.connectionId}: ${err.message}`);
+            }
+        }
+
         let failure = null;
         if (execution.triggerType === 'payment.failed') {
-            failure = this.failureDiagnosisService.analyze({ payment, provider: execution.provider, downtimeCorrelation });
+            failure = this.failureDiagnosisService.analyze({ payment, provider, downtimeCorrelation });
         }
 
         let order = null;

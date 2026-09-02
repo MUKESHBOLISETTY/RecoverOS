@@ -92,6 +92,23 @@ import PrismaConnectorCredentialRepository from '../src/infrastructure/db/connec
 const credentialRepo = new PrismaConnectorCredentialRepository(prisma);
 
 import { connectorManager } from './connectors.config.js';
+
+import { ShopifyCommerceVerifier } from '../src/domain/recovery/verification/shopify-commerce.verifier.js';
+import { RazorpayPaymentVerifier } from '../src/domain/recovery/verification/razorpay-payment.verifier.js';
+import { RecoveryVerifierRegistry } from '../src/domain/recovery/verification/recovery-verifier.registry.js';
+import { RecoveryVerificationService } from '../src/domain/recovery/verification/recovery-verification.service.js';
+import ShopifyConnector from '../src/infrastructure/connectors/shopify-connector.js'; // Assume available or injected via factory
+
+const shopifyVerifier = new ShopifyCommerceVerifier(paymentRepository, connectorManager.connectorFactory.getConnector('shopify'), connectorManager, webhookEventRepository);
+const razorpayRepoFactory = (credentials) => new RazorpayPaymentRepository(credentials);
+const razorpayVerifier = new RazorpayPaymentVerifier(paymentRepository, razorpayRepoFactory, connectorManager);
+const verifierRegistry = new RecoveryVerifierRegistry();
+verifierRegistry.register(shopifyVerifier);
+verifierRegistry.register(razorpayVerifier);
+
+export const recoveryVerificationService = new RecoveryVerificationService(verifierRegistry);
+
+import { RecoveryPolicyValidator } from '../src/domain/agent/policy/recovery-policy.validator.js';
 import { AgentTriggerService } from '../src/domain/agent/agent-trigger.service.js';
 const agentTriggerService = new AgentTriggerService(agentRepository, connectorManager, cacheService);
 
@@ -115,11 +132,11 @@ const subjectContextRegistryFactory = async (credentials) => {
     const { PaymentContextProvider } = await import('../src/domain/recovery/context-providers/payment-context.provider.js');
     const { CheckoutContextProvider } = await import('../src/domain/recovery/context-providers/checkout-context.provider.js');
     const { RecoveryHistoryBuilder } = await import('../src/domain/recovery/recovery-history.builder.js');
-    
+
     const { RazorpayOrderRepository } = await import('../src/infrastructure/razorpay/razorpay-order.repository.js');
     const { OrderContextService } = await import('../src/domain/recovery/order-context.service.js');
     const { FailureDiagnosisService } = await import('../src/domain/recovery/failure-diagnosis.service.js');
-    
+
     const orderRepository = new RazorpayOrderRepository(credentials);
     const orderContextService = new OrderContextService(orderRepository, cacheService);
     const failureDiagnosisService = new FailureDiagnosisService();
@@ -130,7 +147,8 @@ const subjectContextRegistryFactory = async (credentials) => {
         paymentFailureCorrelationRepository,
         recoveryHistoryBuilder,
         failureDiagnosisService,
-        orderContextService
+        orderContextService,
+        connectorManager
     );
 
     const checkoutContextProvider = new CheckoutContextProvider(
@@ -144,22 +162,22 @@ const subjectContextRegistryFactory = async (credentials) => {
     return registry;
 };
 
-    const { TriggerContextResolver } = await import('../src/domain/agent/execution/trigger-context.resolver.js');
-    const { skillSelector, skillRegistry } = await import('./skills.config.js');
-    const triggerContextResolver = new TriggerContextResolver(
-        recoveryCaseService,
-        subjectContextRegistryFactory,
-        skillSelector,
-        skillRegistry
-    );
+const { TriggerContextResolver } = await import('../src/domain/agent/execution/trigger-context.resolver.js');
+const { skillSelector, skillRegistry } = await import('./skills.config.js');
+const triggerContextResolver = new TriggerContextResolver(
+    recoveryCaseService,
+    subjectContextRegistryFactory,
+    skillSelector,
+    skillRegistry
+);
 
-    export const agentExecutionWorkerService = new AgentExecutionWorker(
-        agentExecutionRepository,
-        agentRepository,
-        triggerContextResolver,
-        recoveryCaseRepo,
-        paymentRepository
-    );
+export const agentExecutionWorkerService = new AgentExecutionWorker(
+    agentExecutionRepository,
+    agentRepository,
+    triggerContextResolver,
+    recoveryCaseRepo,
+    paymentRepository
+);
 
 const recoveryScheduleRepository = new PrismaRecoveryScheduleRepository(prisma);
 
@@ -168,7 +186,19 @@ export const recoveryScheduleWorkerService = new RecoveryScheduleWorker(
     recoveryCaseRepo,
     agentExecutionRepository,
     recoveryCaseService,
-    agentExecutionQueueService
+    agentExecutionQueueService,
+    recoveryVerificationService,
+    RecoveryPolicyValidator
+);
+
+import { PaymentStabilizationWorker } from '../src/infrastructure/queue/payment-stabilization.worker.js';
+export const paymentStabilizationWorkerService = new PaymentStabilizationWorker(
+    recoveryVerificationService,
+    RecoveryPolicyValidator,
+    agentExecutionService,
+    recoveryCaseRepo,
+    agentTriggerService,
+    paymentRepository
 );
 
 const outboxEventRepository = new PrismaOutboxEventRepository(prisma);
@@ -186,15 +216,26 @@ export const recoveryScheduleReconciler = new RecoveryScheduleReconciler(
 export async function connectRedis() {
     try {
         if (redisClient.status !== 'ready') {
-            await new Promise((resolve) => {
-                redisClient.once('ready', resolve);
-                redisClient.once('error', resolve);
-                setTimeout(resolve, 3000);
-            });
+            if (redisClient.status === 'wait') {
+                await redisClient.connect();
+            } else {
+                await new Promise((resolve, reject) => {
+                    const onReady = () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    };
+                    const timeout = setTimeout(() => {
+                        redisClient.off('ready', onReady);
+                        reject(new Error("Redis connection timeout after 10s"));
+                    }, 10000);
+                    redisClient.once('ready', onReady);
+                });
+            }
         }
         console.log('Successfully connected and authenticated to Redis!');
     } catch (error) {
-        console.warn(`Failed to ping Redis on startup (${error.message}).`);
+        console.warn(`Failed to connect to Redis on startup (${error.message}). Aborting worker initialization.`);
+        return;
     }
 
     try {
@@ -204,6 +245,7 @@ export async function connectRedis() {
             await shopifyAbandonmentWorkerService.start();
             await agentExecutionWorkerService.start();
             await recoveryScheduleWorkerService.start();
+            await paymentStabilizationWorkerService.start();
             outboxPublisher.start();
             recoveryScheduleReconciler.start();
 
@@ -248,6 +290,7 @@ export async function disconnectRedis() {
         recoveryScheduleReconciler.stop();
         await outboxPublisher.stop();
         await recoveryScheduleWorkerService.close();
+        await paymentStabilizationWorkerService.close();
         await webhookEventWorkerService.close();
         await shopifyAbandonmentWorkerService.close();
         await webhookEventQueueService.close();

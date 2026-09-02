@@ -25,6 +25,51 @@ class ShopifyConnector extends ConnectorInterface {
     }
     return caps;
   }
+
+  async findOrderByToken(token, credentials) {
+    if (!await this.validateCredentials(credentials)) {
+      throw new Error('Invalid Shopify credentials');
+    }
+
+    const { shopDomain, accessToken } = credentials;
+    const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
+
+    let url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?checkout_token=${token}&status=any`;
+    let response = await fetch(url, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Shopify API error (checkout_token): ${response.status} ${response.statusText}`);
+    }
+
+    let data = await response.json();
+    if (data.orders && data.orders.length > 0) {
+      return data.orders[0];
+    }
+
+    url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?cart_token=${token}&status=any`;
+    response = await fetch(url, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Shopify API error (cart_token): ${response.status} ${response.statusText}`);
+    }
+
+    data = await response.json();
+    if (data.orders && data.orders.length > 0) {
+      return data.orders[0];
+    }
+
+    return null;
+  }
 }
 
 export default ShopifyConnector;

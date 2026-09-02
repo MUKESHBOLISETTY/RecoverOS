@@ -53,7 +53,7 @@ class ConnectorManager {
   async updateConnection(id, rawCredentials) {
     const { encryptedData, iv, authTag } = this.encryptionService.encrypt(rawCredentials);
     await this.credentialRepository.update(id, { encryptedData, iv, authTag });
-    
+
     if (this.cacheService) {
       await this.cacheService.del(`connector_credential:${id}`);
     }
@@ -152,19 +152,23 @@ class ConnectorManager {
    */
   async getAllDecryptedCredentialsByConnectorId(connectorId) {
     const connections = await this.getAllConnectionIds(connectorId);
-    
+
     const results = [];
     for (const conn of connections) {
-      const credentials = await this.getDecryptedCredentialsById(conn.id);
-      if (credentials) {
-        results.push({
-          id: conn.id,
-          userId: conn.userId,
-          credentials
-        });
+      try {
+        const credentials = await this.getDecryptedCredentialsById(conn.id);
+        if (credentials) {
+          results.push({
+            id: conn.id,
+            userId: conn.userId,
+            credentials
+          });
+        }
+      } catch (error) {
+        console.warn(`[ConnectorManager] Decryption failed for connector ${connectorId}, credential ${conn.id}. Error: ${error.message}`);
       }
     }
-    
+
     return results;
   }
 
@@ -202,7 +206,7 @@ class ConnectorManager {
 
     const metadata = connector.getMetadata();
     const staticCaps = metadata.capabilities || [];
-    
+
     const dynamicCaps = await connector.getDynamicCapabilities(credentials);
 
     const capabilities = [...new Set([...staticCaps, ...dynamicCaps])];

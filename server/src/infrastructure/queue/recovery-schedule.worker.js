@@ -8,13 +8,17 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
      * @param {import('../db/agent/prisma-agent-execution.repository.js').PrismaAgentExecutionRepository} agentExecutionRepository
      * @param {import('../../domain/recovery/recovery-case.service.js').RecoveryCaseService} recoveryCaseService
      * @param {import('./agent-execution.queue.js').AgentExecutionQueue} agentExecutionQueue
+     * @param {import('../../domain/recovery/verification/recovery-verification.service.js').RecoveryVerificationService} recoveryVerificationService
+     * @param {import('../../domain/agent/policy/recovery-policy.validator.js').RecoveryPolicyValidator} recoveryPolicyValidator
      */
     constructor(
         recoveryScheduleRepository,
         recoveryCaseRepository,
         agentExecutionRepository,
         recoveryCaseService,
-        agentExecutionQueue
+        agentExecutionQueue,
+        recoveryVerificationService,
+        recoveryPolicyValidator
     ) {
         super('recovery-schedule');
         this.recoveryScheduleRepository = recoveryScheduleRepository;
@@ -22,6 +26,8 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
         this.agentExecutionRepository = agentExecutionRepository;
         this.recoveryCaseService = recoveryCaseService;
         this.agentExecutionQueue = agentExecutionQueue;
+        this.recoveryVerificationService = recoveryVerificationService;
+        this.recoveryPolicyValidator = recoveryPolicyValidator;
     }
 
     /**
@@ -52,6 +58,31 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             await this.recoveryScheduleRepository.cancel(scheduleId);
             return;
         }
+
+        const verificationResult = await this.recoveryVerificationService.verify(recoveryCase);
+        console.log(`[RecoveryScheduleWorker] Fresh verification for schedule ${scheduleId}: ${verificationResult.state}`);
+
+        const policyResult = this.recoveryPolicyValidator.getAllowedActionsFromVerification(verificationResult);
+        const safeActions = policyResult.allowedActions || [];
+
+        if (verificationResult.state === 'RECOVERED' || verificationResult.state === 'BLOCKED') {
+            console.log(`[RecoveryScheduleWorker] Case ${recoveryCase.id} is ${verificationResult.state}. Cancelling schedule.`);
+            await this.recoveryScheduleRepository.cancel(scheduleId);
+            return;
+        }
+
+        if (verificationResult.state === 'UNKNOWN' && safeActions.length === 0) {
+            console.log(`[RecoveryScheduleWorker] Case ${recoveryCase.id} is UNKNOWN with no safe actions. Pausing automation by cancelling schedule.`);
+            await this.recoveryScheduleRepository.cancel(scheduleId);
+            return;
+        }
+
+        await this.recoveryCaseRepository.update(recoveryCase.id, {
+            contextSnapshot: {
+                ...recoveryCase.contextSnapshot,
+                verificationResult
+            }
+        });
 
         const newExecutionId = crypto.randomUUID();
 
@@ -85,6 +116,7 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             inputContext: {
                 scheduledReason: schedule.reason,
                 scheduleId,
+                verificationResult
             }
         });
 

@@ -68,6 +68,20 @@ export class PrismaWebhookEventRepository extends WebhookEventRepository {
         `;
         return results.length > 0 ? results[0] : null;
     }
+
+    async findShopifyOrderCreateByCartToken(shopDomain, cartToken, tx = null) {
+        const client = tx || this.prisma;
+        const results = await client.$queryRaw`
+            SELECT * FROM "WebhookEvent"
+            WHERE "source" = 'SHOPIFY'
+              AND "eventType" = 'orders/create'
+              AND payload->>'cart_token' = ${cartToken}
+              AND payload->'_shopifyHeaders'->>'shopDomain' = ${shopDomain}
+            ORDER BY "createdAt" DESC
+            LIMIT 1
+        `;
+        return results.length > 0 ? results[0] : null;
+    }
 }
 
 export default PrismaWebhookEventRepository;
