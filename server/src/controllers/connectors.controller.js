@@ -118,6 +118,10 @@ class ConnectorsController {
         return res.status(400).json({ success: false, error: 'Missing state or code' });
       }
 
+      if (typeof state !== 'string' || typeof code !== 'string') {
+        return res.status(400).json({ success: false, error: 'Invalid query parameters: must be strings' });
+      }
+
       const result = await this.googleOAuthService.handleCallback(state, code);
       // Ensure gmail is attached
       if (result.success && !result.requiresResourceSelection && this.agentRepository && result.connection) {
@@ -188,6 +192,10 @@ class ConnectorsController {
 
       if (!state || !code || !shop) {
         return res.status(400).json({ success: false, error: 'Missing state, code, or shop' });
+      }
+
+      if (typeof state !== 'string' || typeof code !== 'string' || typeof shop !== 'string') {
+        return res.status(400).json({ success: false, error: 'Invalid query parameters: must be strings' });
       }
 
       const result = await this.shopifyOAuthService.handleCallback(state, code, shop);

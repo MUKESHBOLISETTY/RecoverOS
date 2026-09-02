@@ -56,13 +56,17 @@ class GoogleOAuthService {
         const state = crypto.randomBytes(32).toString('hex');
 
         const tempKey = `oauth:google:state:${state}`;
-        await this.cacheService.setJson(tempKey, {
+        const saved = await this.cacheService.setJson(tempKey, {
             userId,
             clientId,
             clientSecret,
             redirectUri,
             connectorId
         }, 900);
+
+        if (!saved) {
+            throw new Error('Failed to securely store OAuth state. Cache service is unavailable.');
+        }
 
         const url = oauth2Client.generateAuthUrl({
             access_type: 'offline',
@@ -108,13 +112,17 @@ class GoogleOAuthService {
         if (connectorId === 'google_sheets') {
             const tempAuthId = crypto.randomBytes(16).toString('hex');
             const sheetsKey = `temp_sheets_auth:${tempAuthId}`;
-            await this.cacheService.setJson(sheetsKey, {
+            const saved = await this.cacheService.setJson(sheetsKey, {
                 userId,
                 clientId,
                 clientSecret,
                 refreshToken: tokens.refresh_token,
                 connectorId
             }, 1800);
+
+            if (!saved) {
+                throw new Error('Failed to securely store Google Sheets auth state. Cache service is unavailable.');
+            }
 
             await this.cacheService.del(tempKey);
             return {

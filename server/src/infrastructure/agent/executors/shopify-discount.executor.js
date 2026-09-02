@@ -111,7 +111,7 @@ export class ShopifyDiscountExecutor extends ToolExecutorInterface {
           value: { percentage: discountPercent / 100 },
           items: { all: true }
         },
-        context: {
+        customerSelection: {
           customers: {
             add: [customerGid]
           }

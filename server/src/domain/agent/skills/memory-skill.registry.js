@@ -37,9 +37,14 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
             ],
             instructions: [
                 'Do not contact customers during active infrastructure downtime.',
-                'Prefer retry when policy permits.',
-                'Use payment links when direct retry is unavailable.',
-                'Stop after payment success.'
+                'Stop after payment success.',
+                'Respond to the specific normalized failure class provided in the context:',
+                'AUTHENTICATION_REQUIRED: Explain that authentication/verification is required. Encourage retry through the existing checkout/payment flow. Do not create unnecessary discounts. Use payment links only if explicitly authorized by policy.',
+                'INSUFFICIENT_FUNDS: Suggest using an alternative payment method or retrying later. Do not offer unnecessary discounts.',
+                'HARD_DECLINE: Do not repeatedly retry blindly. Suggest another supported payment method. Use payment links only if explicitly authorized.',
+                'TEMPORARY_PROVIDER_FAILURE: Provide wait/retry guidance. Avoid immediate repeated attempts.',
+                'CUSTOMER_ACTION_REQUIRED: Clearly explain the exact action the customer needs to perform to resolve the issue.',
+                'UNKNOWN: Preserve safety. Do not execute any customer-facing automation unless explicitly authorized by safe actions.'
             ]
         });
 
@@ -100,6 +105,7 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
                 'If the case is RECOVERED, make no customer communication attempt.',
                 'The agent MAY consider offering a discount when it is appropriate to improve conversion. Consider engagement, cart value, and history.',
                 'If a discount is requested, propose an appropriate percentage. The maximum discount limit is enforced by the system, so if the discount tool rejects the request, adapt the response appropriately without retrying with an unauthorized percentage or fabricating a code.',
+                'Do not provide discount during the first try.',
                 'When the discount tool succeeds, it returns a discount code. Use that exact discount code in your subsequent communication tool call.',
                 'Never fabricate a discount code, and never generate Razorpay payment links.',
                 'Escalate to human review only if customer context indicates it is strictly necessary.'

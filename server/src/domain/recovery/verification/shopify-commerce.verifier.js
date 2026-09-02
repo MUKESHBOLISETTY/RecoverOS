@@ -17,27 +17,38 @@ export class ShopifyCommerceVerifier extends RecoveryVerifierInterface {
 
     canVerify(recoveryCase) {
         const context = recoveryCase.contextSnapshot || {};
-        return !!(context.checkout_token || context.cart_token);
+        return !!(context.checkout_token || context.cart_token || context.checkoutToken || context.cartToken);
     }
 
     async verify(recoveryCase) {
         try {
             const context = recoveryCase.contextSnapshot || {};
-            const token = context.checkout_token || context.cart_token;
+            const token = context.checkout_token || context.checkoutToken || context.cart_token || context.cartToken;
+            const shopDomain = context.shopDomain;
 
             if (!token) {
                 return { state: 'UNKNOWN', evidence: { reason: 'missing_token_at_verify' } };
             }
 
-            const credentials = await this._getExactCredentialsForPayment(recoveryCase.paymentId);
+            let credentials = null;
+            if (recoveryCase.paymentId) {
+                credentials = await this._getExactCredentialsForPayment(recoveryCase.paymentId);
+            } else if (shopDomain) {
+                const connectionName = `Shopify (${shopDomain})`;
+                const credRecord = await this.connectorManager.credentialRepository.findByConnectorAndName('shopify', connectionName);
+                if (credRecord) {
+                    credentials = await this.connectorManager.getDecryptedCredentialsById(credRecord.id);
+                }
+            }
+
             if (!credentials) {
                 return { state: 'UNKNOWN', evidence: { reason: 'missing_exact_shopify_credentials' } };
             }
 
-            const { shopDomain } = credentials;
+            const currentDomain = credentials.shopDomain || shopDomain;
 
-            if (context.checkout_token) {
-                const localCheckoutOrder = await this.webhookEventRepository.findShopifyOrderCreateByCheckoutToken(shopDomain, context.checkout_token);
+            if (context.checkout_token || context.checkoutToken) {
+                const localCheckoutOrder = await this.webhookEventRepository.findShopifyOrderCreateByCheckoutToken(currentDomain, token);
                 if (localCheckoutOrder) {
                     return { state: 'RECOVERED', evidence: { token: context.checkout_token, source: 'local_webhook', eventId: localCheckoutOrder.id } };
                 }

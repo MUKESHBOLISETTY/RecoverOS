@@ -47,13 +47,17 @@ class ShopifyOAuthService {
         const state = crypto.randomBytes(32).toString('hex');
         const stateKey = `oauth:shopify:state:${state}`;
 
-        await this.cacheService.setJson(stateKey, {
+        const saved = await this.cacheService.setJson(stateKey, {
             userId,
             clientId,
             clientSecret,
             redirectUri,
             shopDomain: normalizedShop
         }, 900); // 15 mins TTL
+
+        if (!saved) {
+            throw new Error('Failed to securely store OAuth state. Cache service is unavailable.');
+        }
 
         const scopes = ['read_orders', 'read_customers', 'write_discounts'].join(',');
 
@@ -101,8 +105,7 @@ class ShopifyOAuthService {
             body: JSON.stringify({
                 client_id: clientId,
                 client_secret: clientSecret,
-                code: code,
-                expiring: 1
+                code: code
             })
         });
 
