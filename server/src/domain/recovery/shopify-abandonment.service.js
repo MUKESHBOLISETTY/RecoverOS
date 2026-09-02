@@ -1,3 +1,5 @@
+import { MetricsService } from '../../infrastructure/observability/metrics.service.js';
+
 export class ShopifyAbandonmentService {
     /**
      * @param {import('../events/webhook-event.repository.js').WebhookEventRepository} webhookEventRepository
@@ -107,6 +109,8 @@ export class ShopifyAbandonmentService {
                 contextSnapshot
             });
 
+            MetricsService.increment('cart_recovery_count');
+
             console.log(`[ShopifyAbandonmentService] Successfully created CART_ABANDONMENT RecoveryCase ${recoveryCase.id} for checkout ${checkoutToken} on ${shopDomain}`);
 
             // Trigger AgentExecution
@@ -137,6 +141,7 @@ export class ShopifyAbandonmentService {
                                 });
 
                                 await this.agentExecutionService.enqueueExecution(execution);
+                                MetricsService.increment('agent_execution_created_count', { triggerType: 'checkout.abandoned', agentId: agent.id });
                                 console.log(`[ShopifyAbandonmentService] Queued AgentExecution ${execution.id} for agent ${agent.id}`);
                             } catch (err) {
                                 if (err.name === 'DuplicateExecutionError') {

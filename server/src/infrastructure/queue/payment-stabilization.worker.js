@@ -1,4 +1,5 @@
 import { BaseWorkerService } from './base-worker.service.js';
+import { MetricsService } from '../observability/metrics.service.js';
 
 export class PaymentStabilizationWorker extends BaseWorkerService {
     /**
@@ -61,11 +62,16 @@ export class PaymentStabilizationWorker extends BaseWorkerService {
             const safeActions = policyResult.allowedActions || [];
 
             if (verificationResult.state === 'UNKNOWN' && safeActions.length === 0) {
+                MetricsService.increment('agent_execution_suppressed_count', { reason: 'unknown_no_safe_actions', agentId: agent.id });
                 console.log(`[PaymentStabilizationWorker] Execution safely paused for Agent ${agent.id} on Case ${recoveryCaseId} due to UNKNOWN state with no safe actions.`);
                 continue;
             }
 
             if (verificationResult.state === 'RECOVERED' || verificationResult.state === 'BLOCKED') {
+                MetricsService.increment('agent_execution_suppressed_count', { reason: verificationResult.state.toLowerCase(), agentId: agent.id });
+                if (verificationResult.state === 'BLOCKED') {
+                    MetricsService.increment('verification_blocked_count', { agentId: agent.id });
+                }
                 console.log(`[PaymentStabilizationWorker] Stopping automation for Agent ${agent.id} on Case ${recoveryCaseId}, state: ${verificationResult.state}`);
                 continue;
             }
@@ -84,6 +90,7 @@ export class PaymentStabilizationWorker extends BaseWorkerService {
             });
 
             await this.agentExecutionService.enqueueExecution(execution);
+            MetricsService.increment('agent_execution_created_count', { triggerType: 'payment.failed', agentId: agent.id });
             console.log(`[PaymentStabilizationWorker] Enqueued AgentExecution ${execution.id} for Case ${recoveryCaseId}`);
         }
     }

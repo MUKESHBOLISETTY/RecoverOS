@@ -1,4 +1,5 @@
 import { PaymentFailureNormalizer } from './payment-failure.normalizer.js';
+import { MetricsService } from '../../infrastructure/observability/metrics.service.js';
 
 export class PaymentRecoveryService {
     /**
@@ -62,6 +63,11 @@ export class PaymentRecoveryService {
                     status: 'OPEN',
                     contextSnapshot
                 });
+                MetricsService.increment('payment_recovery_count', {
+                    transactionType,
+                    recoveryTarget,
+                    failureClass: normalizedFailure
+                });
                 console.log(`[PaymentRecoveryService] Created RecoveryCase ${recoveryCase.id} for payment ${payment.id}`);
             } else {
                 console.log(`[PaymentRecoveryService] Found existing RecoveryCase ${recoveryCase.id} for payment ${payment.id}`);
@@ -76,9 +82,14 @@ export class PaymentRecoveryService {
     }
 
     _classifyTransactionType(payment, rawBody) {
-        if (payment.method === 'emandate' || payment.method === 'recurring') return 'RECURRING';
-        if (rawBody?.payload?.payment?.entity?.recurring) return 'RECURRING';
+        const method = payment.method || rawBody?.payload?.payment?.entity?.method;
+        const recurring = payment.recurring || rawBody?.payload?.payment?.entity?.recurring;
+
+        if (method === 'emandate' || method === 'nach') return 'MANDATE';
+        if (method === 'recurring' || recurring) return 'RECURRING';
         if (rawBody?.payload?.payment?.entity?.token_id) return 'RECURRING';
+
+        if (!method) return 'UNKNOWN';
 
         return 'ONE_TIME';
     }

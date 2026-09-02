@@ -1,3 +1,5 @@
+import { MetricsService } from '../../../infrastructure/observability/metrics.service.js';
+
 export class RecoveryVerificationService {
     /**
      * @param {import('./recovery-verifier.registry.js').RecoveryVerifierRegistry} registry
@@ -26,14 +28,32 @@ export class RecoveryVerificationService {
             };
         }
 
+        let result;
         try {
-            return await verifier.verify(recoveryCase);
+            result = await verifier.verify(recoveryCase);
         } catch (error) {
             console.error(`[RecoveryVerificationService] Error during verification of case ${recoveryCase.id}:`, error);
-            return {
+            result = {
                 state: 'UNKNOWN',
                 evidence: { reason: 'verifier_threw_error', error: error.message }
             };
         }
+
+        MetricsService.increment('verification_coverage', { 
+            state: result.state, 
+            type: recoveryCase.subjectType 
+        });
+
+        if (result.state === 'UNKNOWN') {
+            MetricsService.increment('verification_unknown_count', { type: recoveryCase.subjectType });
+        } else if (result.state === 'RECOVERED') {
+            MetricsService.increment('verification_recovered_count', { type: recoveryCase.subjectType });
+        } else if (result.state === 'STILL_RECOVERABLE') {
+            MetricsService.increment('verification_still_recoverable_count', { type: recoveryCase.subjectType });
+        } else if (result.state === 'CUSTOMER_ACTION_REQUIRED') {
+            MetricsService.increment('customer_action_required_count', { type: recoveryCase.subjectType });
+        }
+
+        return result;
     }
 }
