@@ -51,6 +51,12 @@ export class AgentExecutionWorker extends BaseWorkerService {
                 status: 'RUNNING', startedAt: new Date()
             });
 
+            if (global.recoveryEventPublisher && execution.recoveryCaseId && execution.userId) {
+                const provider = execution.triggerType === 'checkout.abandoned' ? 'shopify' : 'razorpay';
+                const recoveryType = execution.triggerType === 'checkout.abandoned' ? 'CART_ABANDONMENT' : 'PAYMENT_FAILURE';
+                await global.recoveryEventPublisher.publishAgentStarted(execution.recoveryCaseId, recoveryType, provider, executionId, execution.userId);
+            }
+
             const { triggerType, inputContext, provider } = execution;
 
         let fullContext = null;

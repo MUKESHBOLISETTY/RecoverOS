@@ -2,23 +2,28 @@ import { MetricsService } from '../../../infrastructure/observability/metrics.se
 
 export class RecoveryVerificationService {
     /**
-     * @param {import('./recovery-verifier.registry.js').RecoveryVerifierRegistry} registry
+     * @param {import('./recovery-verifier.registry.js').RecoveryVerifierRegistry} verifierRegistry
+     * @param {import('../recovery-event-publisher.interface.js').RecoveryEventPublisherInterface} [recoveryEventPublisher]
      */
-    constructor(registry) {
-        if (!registry) throw new Error('RecoveryVerificationService: registry is required');
-        this.registry = registry;
+    constructor(verifierRegistry, recoveryEventPublisher = null) {
+        if (!verifierRegistry) {
+            throw new Error('RecoveryVerificationService: verifierRegistry is required');
+        }
+        this.verifierRegistry = verifierRegistry;
+        this.recoveryEventPublisher = recoveryEventPublisher;
     }
 
     /**
      * @param {Object} recoveryCase 
+     * @param {Object} options
      * @returns {Promise<import('./recovery-verifier.interface.js').VerificationResult>}
      */
-    async verify(recoveryCase) {
+    async verify(recoveryCase, { userId, cacheBypass = false } = {}) {
         if (!recoveryCase) {
             throw new Error('RecoveryVerificationService: recoveryCase is required');
         }
 
-        const verifier = this.registry.getVerifier(recoveryCase);
+        const verifier = this.verifierRegistry.getVerifier(recoveryCase);
 
         if (!verifier) {
             console.warn(`[RecoveryVerificationService] No verifier capable of handling case ${recoveryCase.id}. Defaulting to UNKNOWN.`);
@@ -28,9 +33,19 @@ export class RecoveryVerificationService {
             };
         }
 
+        if (this.recoveryEventPublisher && userId) {
+            const provider = recoveryCase.type === 'CART_ABANDONMENT' ? 'shopify' : 'razorpay';
+            await this.recoveryEventPublisher.publishVerificationStarted(recoveryCase.id, recoveryCase.type, provider, userId);
+        }
+
         let result;
         try {
             result = await verifier.verify(recoveryCase);
+
+            if (this.recoveryEventPublisher && userId) {
+                const provider = recoveryCase.type === 'CART_ABANDONMENT' ? 'shopify' : 'razorpay';
+                await this.recoveryEventPublisher.publishVerificationCompleted(recoveryCase.id, recoveryCase.type, provider, result, userId);
+            }
         } catch (error) {
             console.error(`[RecoveryVerificationService] Error during verification of case ${recoveryCase.id}:`, error);
             result = {

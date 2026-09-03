@@ -59,7 +59,17 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             return;
         }
 
-        const verificationResult = await this.recoveryVerificationService.verify(recoveryCase);
+        const origExecution = schedule.createdByExecutionId
+            ? await this.agentExecutionRepository.findById(schedule.createdByExecutionId)
+            : null;
+
+        if (!origExecution) {
+            console.error(`[RecoveryScheduleWorker] Cannot find original execution for schedule ${scheduleId}. Aborting.`);
+            await this.recoveryScheduleRepository.markFailed(scheduleId);
+            return;
+        }
+
+        const verificationResult = await this.recoveryVerificationService.verify(recoveryCase, { userId: origExecution.userId });
         console.log(`[RecoveryScheduleWorker] Fresh verification for schedule ${scheduleId}: ${verificationResult.state}`);
 
         const policyResult = this.recoveryPolicyValidator.getAllowedActionsFromVerification(verificationResult);
@@ -90,16 +100,6 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
 
         if (updateResult === 0) {
             console.log(`[RecoveryScheduleWorker] Schedule ${scheduleId} was already fired or cancelled. Skipping.`);
-            return;
-        }
-
-        const origExecution = schedule.createdByExecutionId
-            ? await this.agentExecutionRepository.findById(schedule.createdByExecutionId)
-            : null;
-
-        if (!origExecution) {
-            console.error(`[RecoveryScheduleWorker] Cannot find original execution for schedule ${scheduleId}. Aborting.`);
-            await this.recoveryScheduleRepository.markFailed(scheduleId);
             return;
         }
 

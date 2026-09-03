@@ -21,6 +21,9 @@ export const emailWorkerService = new EmailWorkerService();
 export const emailQueue = emailQueueService.getUnderlyingQueue();
 export const emailWorker = emailWorkerService.getUnderlyingWorker();
 
+import { RecoveryEventPublisher } from '../src/infrastructure/pubsub/recovery-event.publisher.js';
+export const recoveryEventPublisher = new RecoveryEventPublisher(pubsubService);
+
 import { WebhookEventQueue } from '../src/infrastructure/queue/webhook-event.queue.js';
 import { WebhookEventWorker } from '../src/infrastructure/queue/webhook-event.worker.js';
 import { RedisIdempotencyStore } from '../src/infrastructure/idempotency/redis-idempotency.store.js';
@@ -122,7 +125,8 @@ const shopifyAbandonmentService = new ShopifyAbandonmentService(
     credentialRepo,
     agentTriggerService,
     agentExecutionService,
-    cacheService
+    cacheService,
+    recoveryEventPublisher
 );
 
 export const shopifyAbandonmentWorkerService = new ShopifyAbandonmentWorker(shopifyAbandonmentService);

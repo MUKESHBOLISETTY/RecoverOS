@@ -7,7 +7,7 @@ export class PaymentRecoveryService {
      * @param {import('../../infrastructure/cache/base-cache.service.js').BaseCacheService} cacheService
      * @param {import('../../infrastructure/queue/payment-stabilization.queue.js').PaymentStabilizationQueue} paymentStabilizationQueue
      */
-    constructor(recoveryCaseRepository, cacheService, paymentStabilizationQueue) {
+    constructor(recoveryCaseRepository, cacheService, paymentStabilizationQueue, recoveryEventPublisher = null) {
         if (!recoveryCaseRepository) throw new Error('PaymentRecoveryService: recoveryCaseRepository is required');
         if (!cacheService) throw new Error('PaymentRecoveryService: cacheService is required');
         if (!paymentStabilizationQueue) throw new Error('PaymentRecoveryService: paymentStabilizationQueue is required');
@@ -15,6 +15,7 @@ export class PaymentRecoveryService {
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.cacheService = cacheService;
         this.paymentStabilizationQueue = paymentStabilizationQueue;
+        this.recoveryEventPublisher = recoveryEventPublisher;
     }
 
     /**
@@ -63,6 +64,9 @@ export class PaymentRecoveryService {
                     status: 'OPEN',
                     contextSnapshot
                 });
+                if (this.recoveryEventPublisher && payment.userId) {
+                    await this.recoveryEventPublisher.publishCaseCreated(recoveryCase.id, 'PAYMENT_FAILURE', 'razorpay', payment.userId);
+                }
                 MetricsService.increment('payment_recovery_count', {
                     transactionType,
                     recoveryTarget,

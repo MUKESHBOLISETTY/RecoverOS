@@ -8,19 +8,22 @@ export class ToolExecutionService {
      * @param {import('../../db/recovery/prisma-recovery-case.repository.js').PrismaRecoveryCaseRepository} recoveryCaseRepository
      * @param {import('../../db/agent/prisma-recovery-action.repository.js').PrismaRecoveryActionRepository} recoveryActionRepository
      * @param {import('../../cache/base-cache.service.js').BaseCacheService} cacheService
+     * @param {import('../../domain/recovery/recovery-event-publisher.interface.js').RecoveryEventPublisherInterface} [recoveryEventPublisher]
      */
     constructor(
         toolExecutorFactory,
         agentExecutionRepository,
         recoveryCaseRepository,
         recoveryActionRepository,
-        cacheService
+        cacheService,
+        recoveryEventPublisher = null
     ) {
         this.toolExecutorFactory = toolExecutorFactory;
         this.agentExecutionRepository = agentExecutionRepository;
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.recoveryActionRepository = recoveryActionRepository;
         this.cacheService = cacheService;
+        this.recoveryEventPublisher = recoveryEventPublisher;
     }
 
     /**
@@ -88,6 +91,11 @@ export class ToolExecutionService {
                 });
 
                 if (!validation.allowed) {
+                    if (this.recoveryEventPublisher && caseId && recoveryContext?.user?.id) {
+                        const provider = recoveryContext?.triggerType === 'checkout.abandoned' ? 'shopify' : 'razorpay';
+                        const recoveryType = recoveryContext?.triggerType === 'checkout.abandoned' ? 'CART_ABANDONMENT' : 'PAYMENT_FAILURE';
+                        await this.recoveryEventPublisher.publishActionBlocked(caseId, recoveryType, provider, action, validation.reason, recoveryContext.user.id);
+                    }
                     throw new PolicyViolationError(validation);
                 }
 
@@ -110,6 +118,14 @@ export class ToolExecutionService {
 
         console.log(`[ToolExecutionService] Executing ${action} for ${executionId}...`);
 
+        const provider = recoveryContext?.triggerType === 'checkout.abandoned' ? 'shopify' : 'razorpay';
+        const recoveryType = recoveryContext?.triggerType === 'checkout.abandoned' ? 'CART_ABANDONMENT' : 'PAYMENT_FAILURE';
+        const userId = recoveryContext?.user?.id;
+
+        if (this.recoveryEventPublisher && caseId && userId) {
+            await this.recoveryEventPublisher.publishActionStarted(caseId, recoveryType, provider, action, userId);
+        }
+
         let result;
         try {
             result = await executor.execute({
@@ -127,6 +143,10 @@ export class ToolExecutionService {
                     status: 'COMPLETED',
                     payload: result
                 });
+            }
+
+            if (this.recoveryEventPublisher && caseId && userId) {
+                await this.recoveryEventPublisher.publishActionCompleted(caseId, recoveryType, provider, action, result, userId);
             }
 
             return result;

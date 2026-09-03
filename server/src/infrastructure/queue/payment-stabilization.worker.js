@@ -39,7 +39,13 @@ export class PaymentStabilizationWorker extends BaseWorkerService {
             return;
         }
 
-        const verificationResult = await this.verificationService.verify(recoveryCase);
+        const payment = await this.paymentRepository.findById(paymentId);
+        if (!payment || !payment.userId) {
+            console.log(`[PaymentStabilizationWorker] Missing payment/userId for payment ${paymentId}, skipping.`);
+            return;
+        }
+
+        const verificationResult = await this.verificationService.verify(recoveryCase, { userId: payment.userId });
         console.log(`[PaymentStabilizationWorker] Case ${recoveryCaseId} verified as ${verificationResult.state}`);
 
         await this.recoveryCaseRepository.update(recoveryCaseId, {
@@ -48,12 +54,6 @@ export class PaymentStabilizationWorker extends BaseWorkerService {
                 verificationResult
             }
         });
-
-        const payment = await this.paymentRepository.findById(paymentId);
-        if (!payment || !payment.userId) {
-            console.log(`[PaymentStabilizationWorker] Missing payment/userId for payment ${paymentId}, skipping.`);
-            return;
-        }
 
         const triggeredAgents = await this.agentTriggerService.evaluateTriggers(payment.userId, 'payment.failed', { payload: { payment: { entity: payment } } });
 

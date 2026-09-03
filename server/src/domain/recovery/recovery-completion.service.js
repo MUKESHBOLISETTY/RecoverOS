@@ -2,10 +2,12 @@ export class RecoveryCompletionService {
     /**
      * @param {import('../../infrastructure/db/recovery/prisma-recovery-case.repository.js').PrismaRecoveryCaseRepository} recoveryCaseRepository
      * @param {import('../../infrastructure/cache/base-cache.service.js').BaseCacheService} cacheService
+     * @param {import('./recovery-event-publisher.interface.js').RecoveryEventPublisherInterface} [recoveryEventPublisher]
      */
-    constructor(recoveryCaseRepository, cacheService) {
+    constructor(recoveryCaseRepository, cacheService, recoveryEventPublisher = null) {
         this.recoveryCaseRepository = recoveryCaseRepository;
         this.cacheService = cacheService;
+        this.recoveryEventPublisher = recoveryEventPublisher;
     }
 
     /**
@@ -18,10 +20,11 @@ export class RecoveryCompletionService {
      * @param {string} params.verifiedOutcome.notes
      * @param {string} params.sourceEvent
      * @param {string} [params.sourceEventId] - Provider event ID
+     * @param {string} [params.userId]
      * @returns {Promise<string[]>} array of recovered case IDs
      */
     async complete(params) {
-        const { recoveryCaseId, subjectType, subjectId, verifiedOutcome, sourceEvent, sourceEventId } = params;
+        const { recoveryCaseId, subjectType, subjectId, verifiedOutcome, sourceEvent, sourceEventId, userId } = params;
 
         const recoveredCases = await this.recoveryCaseRepository.markRecovered({
             recoveryCaseId,
@@ -42,8 +45,13 @@ export class RecoveryCompletionService {
                     console.log(`  sourceEvent=${sourceEvent}`);
                     console.log(`  outcome=PAYMENT_RECOVERED`);
                     console.log(`  schedulesCancelled=${recoveryCase.schedulesCancelled || 0}`);
+
+                    if (this.recoveryEventPublisher && userId) {
+                        const provider = recoveryCase.type === 'CART_ABANDONMENT' ? 'shopify' : 'razorpay';
+                        await this.recoveryEventPublisher.publishCaseRecovered(recoveryCase.id, recoveryCase.type, provider, userId);
+                    }
                 } catch (err) {
-                    console.error(`[RecoveryCompletionService] Failed to clear cache for case ${recoveryCase.id}:`, err.message);
+                    console.error(`[RecoveryCompletionService] Failed to clear cache or publish event for case ${recoveryCase.id}:`, err.message);
                 }
             }
         };

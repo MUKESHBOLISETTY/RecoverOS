@@ -89,7 +89,8 @@ export class TriggerContextResolver {
                     subjectType,
                     subjectId,
                     activeSkillId,
-                    activeSkillVersion
+                    activeSkillVersion,
+                    userId: execution.userId
                 });
             }
         } else {

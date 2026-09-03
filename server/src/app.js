@@ -5,6 +5,7 @@ import "dotenv/config";
 import helmet from 'helmet';
 import createWebhookRouter from './routes/webhook.routes.js';
 import createAuthRouter from './routes/auth.routes.js';
+import recoveryStreamRoutes from './routes/recovery-stream.routes.js';
 import { connectorsRouter, connectorManager } from '../config/connectors.config.js';
 import { connectDB } from '../config/database.config.js';
 import { connectRedis, idempotencyStore, webhookEventQueueService, webhookEventRepository } from '../config/redis.config.js';
@@ -38,6 +39,7 @@ app.use(cookieParser());
 app.use('/webhooks', webhookRoutes);
 app.use('/auth', authRoutes);
 app.use('/connectors', connectorsRouter);
+app.use('/api/v1/recovery/stream', recoveryStreamRoutes);
 
 app.get('/', (req, res) => {
     return res.json({

@@ -62,12 +62,15 @@ toolExecutorFactory.registerExecutor('commerce.discount.create', new ShopifyDisc
 
 const agentExecutionRepository = new PrismaAgentExecutionRepository(prisma);
 
+import { recoveryEventPublisher } from './redis.config.js';
+
 const toolExecutionService = new ToolExecutionService(
     toolExecutorFactory,
     agentExecutionRepository,
     recoveryCaseRepository,
     recoveryActionRepository,
-    cacheService
+    cacheService,
+    recoveryEventPublisher
 );
 
 const toolAdapter = new ToolAdapter(toolExecutionService);

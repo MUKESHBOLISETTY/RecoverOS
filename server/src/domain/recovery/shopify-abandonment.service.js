@@ -15,7 +15,8 @@ export class ShopifyAbandonmentService {
         credentialRepo,
         agentTriggerService,
         agentExecutionService,
-        cacheService
+        cacheService,
+        recoveryEventPublisher = null
     ) {
         this.webhookEventRepository = webhookEventRepository;
         this.recoveryCaseRepository = recoveryCaseRepository;
@@ -23,6 +24,7 @@ export class ShopifyAbandonmentService {
         this.agentTriggerService = agentTriggerService;
         this.agentExecutionService = agentExecutionService;
         this.cacheService = cacheService;
+        this.recoveryEventPublisher = recoveryEventPublisher;
     }
 
     async processAbandonment({ shopDomain, checkoutToken, webhookEventId, checkoutUpdatedAt, jobId }) {
@@ -120,6 +122,10 @@ export class ShopifyAbandonmentService {
 
                 if (credential) {
                     const userId = credential.userId;
+
+                    if (this.recoveryEventPublisher) {
+                        await this.recoveryEventPublisher.publishCaseCreated(recoveryCase.id, 'CART_ABANDONMENT', 'shopify', userId);
+                    }
 
                     const triggeredAgents = await this.agentTriggerService.evaluateTriggers(userId, 'checkout.abandoned', payload);
                     const exactAgents = triggeredAgents.filter(agent =>

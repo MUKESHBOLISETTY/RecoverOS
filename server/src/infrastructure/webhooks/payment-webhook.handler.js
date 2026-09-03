@@ -94,7 +94,8 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
             }
 
             if (shouldComplete) {
-                const recoveryCompletionService = new RecoveryCompletionService(recoveryCaseRepository, cacheService);
+                const { recoveryEventPublisher } = await import('../../../config/redis.config.js');
+                const recoveryCompletionService = new RecoveryCompletionService(recoveryCaseRepository, cacheService, recoveryEventPublisher);
                 const { postCommitOrchestration } = await recoveryCompletionService.complete({
                     recoveryCaseId: recoveryCaseId || undefined,
                     subjectType: 'PAYMENT',
@@ -104,7 +105,8 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                         notes: `Recovered via ${entity.id} (event: payment.captured)`
                     },
                     sourceEvent: eventType,
-                    sourceEventId: externalEventId || entity.id
+                    sourceEventId: externalEventId || entity.id,
+                    userId
                 });
 
                 if (postCommitHooks && postCommitOrchestration) {
@@ -118,7 +120,8 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                 await correlationEngine.correlatePaymentFailure(payment);
 
                 const stabilizationQueue = new PaymentStabilizationQueue();
-                const paymentRecoveryService = new PaymentRecoveryService(recoveryCaseRepository, cacheService, stabilizationQueue);
+                const { recoveryEventPublisher } = await import('../../../config/redis.config.js');
+                const paymentRecoveryService = new PaymentRecoveryService(recoveryCaseRepository, cacheService, stabilizationQueue, recoveryEventPublisher);
 
                 return paymentRecoveryService.handlePaymentFailed(payment, webhook);
             }
