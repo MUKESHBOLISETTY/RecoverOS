@@ -20,10 +20,14 @@ export class PaymentRecoveryService {
 
     /**
      * @param {Object} payment
-     * @param {Object} rawBody
+     * @param {Object} webhookContext
      * @returns {Promise<Object>}
      */
-    async handlePaymentFailed(payment, rawBody) {
+    async handlePaymentFailed(payment, webhookContext) {
+        const rawBody = webhookContext.body || webhookContext;
+        const provider = webhookContext.provider || 'RAZORPAY';
+        const connectionId = webhookContext.connectionId;
+
         const transactionType = this._classifyTransactionType(payment, rawBody);
         if (transactionType !== 'ONE_TIME') {
             console.log(`[PaymentRecoveryService] Ignoring transaction type ${transactionType} for payment ${payment.id}`);
@@ -31,7 +35,6 @@ export class PaymentRecoveryService {
         }
 
         const recoveryTarget = this._classifyRecoveryTarget(payment, rawBody);
-
         const normalizedFailure = PaymentFailureNormalizer.normalizeRazorpayFailure(payment);
 
         const lockKey = `lock-recovery-creation-${payment.id}`;
@@ -41,9 +44,26 @@ export class PaymentRecoveryService {
             return { status: 'skipped', reason: 'concurrent_creation_locked' };
         }
 
-        let recoveryCase;
         try {
-            recoveryCase = await this.recoveryCaseRepository.findByEntity('PAYMENT_FAILURE', { paymentId: payment.id });
+            const { CheckoutIdentityResolver } = await import('../recovery/checkout-identity.resolver.js');
+            const identity = CheckoutIdentityResolver.resolve(provider, rawBody, {}, { connectionId });
+
+            if (identity.confidence === 'DETERMINISTIC') {
+                const checkoutCase = await this.recoveryCaseRepository.findShopifyAbandonmentCase(identity.storeId, identity.checkoutId);
+
+                if (checkoutCase) {
+                    console.log(`[PaymentRecoveryService] Deterministic payment ${payment.id} associated with checkout case ${checkoutCase.id}`);
+                    if (this.recoveryEventPublisher && payment.userId) {
+                        await this.recoveryEventPublisher.publishPaymentAttemptFailed(checkoutCase.id, checkoutCase.type, provider, payment.userId, payment.id);
+                    }
+                    return { status: 'associated', recoveryCaseId: checkoutCase.id };
+                } else {
+                    console.log(`[PaymentRecoveryService] Deterministic payment ${payment.id} has no existing checkout case. Preserving payment without fabricating abandonment.`);
+                    return { status: 'preserved', reason: 'waiting_for_abandonment' };
+                }
+            }
+
+            let recoveryCase = await this.recoveryCaseRepository.findByEntity('PAYMENT_FAILURE', { paymentId: payment.id });
             if (!recoveryCase) {
                 const contextSnapshot = {
                     failureClass: normalizedFailure,
@@ -51,7 +71,6 @@ export class PaymentRecoveryService {
                     recoveryTarget
                 };
 
-                // If there's a checkout_token in notes or payload, we capture it for evidence
                 const entityNotes = rawBody?.payload?.payment?.entity?.notes || {};
                 if (entityNotes.checkout_token) contextSnapshot.checkout_token = entityNotes.checkout_token;
                 if (entityNotes.cart_token) contextSnapshot.cart_token = entityNotes.cart_token;
@@ -64,9 +83,11 @@ export class PaymentRecoveryService {
                     status: 'OPEN',
                     contextSnapshot
                 });
+
                 if (this.recoveryEventPublisher && payment.userId) {
-                    await this.recoveryEventPublisher.publishCaseCreated(recoveryCase.id, 'PAYMENT_FAILURE', 'razorpay', payment.userId);
+                    await this.recoveryEventPublisher.publishCaseCreated(recoveryCase.id, 'PAYMENT_FAILURE', provider, payment.userId);
                 }
+
                 MetricsService.increment('payment_recovery_count', {
                     transactionType,
                     recoveryTarget,
@@ -76,13 +97,13 @@ export class PaymentRecoveryService {
             } else {
                 console.log(`[PaymentRecoveryService] Found existing RecoveryCase ${recoveryCase.id} for payment ${payment.id}`);
             }
+
+            await this.paymentStabilizationQueue.enqueueStabilization(recoveryCase.id, payment.id);
+            return { status: 'processed', recoveryCaseId: recoveryCase.id };
+
         } finally {
             await this.cacheService.del(lockKey);
         }
-
-        await this.paymentStabilizationQueue.enqueueStabilization(recoveryCase.id, payment.id);
-
-        return { status: 'processed', recoveryCaseId: recoveryCase.id };
     }
 
     _classifyTransactionType(payment, rawBody) {

@@ -107,4 +107,8 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
     async publishCaseFailed(caseId, recoveryType, provider, userId) {
         return this._publish('RECOVERY_CASE_FAILED', caseId, recoveryType, provider, userId, 'COMPLETION', { status: 'FAILED' });
     }
+
+    async publishPaymentAttemptFailed(caseId, recoveryType, provider, userId, paymentId) {
+        return this._publish('RECOVERY_PAYMENT_ATTEMPT_FAILED', caseId, recoveryType, provider, userId, 'PAYMENT_EVENT', { paymentId });
+    }
 }

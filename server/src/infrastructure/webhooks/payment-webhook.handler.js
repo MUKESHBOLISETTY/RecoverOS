@@ -79,27 +79,39 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
         console.log(`[PaymentWebhookHandler] Upserted payment ${payment.razorpayPaymentId} (status: ${payment.status}, event: ${eventType})`);
 
         if (eventType === 'payment.captured') {
-            const recoveryCaseId = entity.notes?.recoveryCaseId;
+            const { CheckoutIdentityResolver } = await import('../../domain/recovery/checkout-identity.resolver.js');
+            const identity = CheckoutIdentityResolver.resolve(provider || 'RAZORPAY', body, {}, { connectionId });
+
+            let targetCaseId = entity.notes?.recoveryCaseId;
             let shouldComplete = true;
 
-            if (recoveryCaseId) {
-                const recoveryCase = await recoveryCaseRepository.findById(recoveryCaseId);
+            if (identity.confidence === 'DETERMINISTIC') {
+                const checkoutCase = await recoveryCaseRepository.findShopifyAbandonmentCase(identity.storeId, identity.checkoutId);
+                if (checkoutCase) {
+                    targetCaseId = checkoutCase.id;
+                    console.log(`[PaymentWebhookHandler] Payment ${payment.id} captured - deterministically associated with checkout case ${targetCaseId}`);
+                }
+            }
+
+            if (targetCaseId) {
+                const recoveryCase = await recoveryCaseRepository.findById(targetCaseId);
                 if (recoveryCase && recoveryCase.paymentId) {
                     const originalPayment = await paymentRepository.findById(recoveryCase.paymentId);
                     if (originalPayment && originalPayment.userId && userId && originalPayment.userId !== userId) {
-                        console.warn(`[PaymentWebhookHandler] Rejecting correlation: Case ${recoveryCaseId} belongs to user ${originalPayment.userId}, but captured payment came from user ${userId}`);
+                        console.warn(`[PaymentWebhookHandler] Rejecting correlation: Case ${targetCaseId} belongs to user ${originalPayment.userId}, but captured payment came from user ${userId}`);
                         shouldComplete = false;
                     }
                 }
             }
 
-            if (shouldComplete) {
+            if (shouldComplete && (targetCaseId || identity.confidence === 'DETERMINISTIC')) {
                 const { recoveryEventPublisher } = await import('../../../config/redis.config.js');
                 const recoveryCompletionService = new RecoveryCompletionService(recoveryCaseRepository, cacheService, recoveryEventPublisher);
-                const { postCommitOrchestration } = await recoveryCompletionService.complete({
-                    recoveryCaseId: recoveryCaseId || undefined,
-                    subjectType: 'PAYMENT',
-                    subjectId: payment.id,
+
+                const completeArgs = {
+                    recoveryCaseId: targetCaseId || undefined,
+                    subjectType: targetCaseId ? 'PAYMENT' : 'CHECKOUT',
+                    subjectId: targetCaseId ? payment.id : identity.checkoutId,
                     verifiedOutcome: {
                         amountRecovered: payment.amount,
                         notes: `Recovered via ${entity.id} (event: payment.captured)`
@@ -107,7 +119,9 @@ export class PaymentWebhookHandler extends BaseWebhookHandler {
                     sourceEvent: eventType,
                     sourceEventId: externalEventId || entity.id,
                     userId
-                });
+                };
+
+                const { postCommitOrchestration } = await recoveryCompletionService.complete(completeArgs);
 
                 if (postCommitHooks && postCommitOrchestration) {
                     postCommitHooks.push(postCommitOrchestration);

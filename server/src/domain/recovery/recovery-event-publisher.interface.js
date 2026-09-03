@@ -106,4 +106,15 @@ export class RecoveryEventPublisherInterface {
     async publishCaseFailed(caseId, recoveryType, provider, userId) {
         throw new Error('Not implemented');
     }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {string} userId
+     * @param {string} paymentId
+     */
+    async publishPaymentAttemptFailed(caseId, recoveryType, provider, userId, paymentId) {
+        throw new Error('Not implemented');
+    }
 }
