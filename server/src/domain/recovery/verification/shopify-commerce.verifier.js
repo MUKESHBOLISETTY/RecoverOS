@@ -55,7 +55,7 @@ export class ShopifyCommerceVerifier extends RecoveryVerifierInterface {
             }
 
             if (context.cart_token) {
-                const localCartOrder = await this.webhookEventRepository.findShopifyOrderCreateByCartToken(shopDomain, context.cart_token);
+                const localCartOrder = await this.webhookEventRepository.findShopifyOrderCreateByCartToken(currentDomain, context.cart_token);
                 if (localCartOrder) {
                     return { state: 'RECOVERED', evidence: { token: context.cart_token, source: 'local_webhook', eventId: localCartOrder.id } };
                 }
@@ -63,19 +63,23 @@ export class ShopifyCommerceVerifier extends RecoveryVerifierInterface {
 
             try {
                 const order = await this.shopifyConnector.findOrderByToken(token, credentials);
-                if (order && order.confirmed !== false) { // verified success
-                    return { state: 'RECOVERED', evidence: { orderId: order.id, token, source: 'shopify_api' } };
+                if (order) {
+                    if (order.fullyPaid === true) {
+                        return { state: 'RECOVERED', evidence: { orderId: order.id, token, source: 'shopify_api_graphql', displayFinancialStatus: order.displayFinancialStatus } };
+                    }
+                    // Found an order but it is not fully paid yet
+                    return { state: 'NOT_RECOVERED', evidence: { reason: 'order_found_but_not_fully_paid', orderId: order.id, displayFinancialStatus: order.displayFinancialStatus } };
                 }
 
-                return { state: 'UNKNOWN', evidence: { reason: 'no_completed_order_found' } };
+                return { state: 'NOT_RECOVERED', evidence: { reason: 'no_completed_order_found' } };
             } catch (apiError) {
                 console.warn(`[ShopifyCommerceVerifier] API Error for token ${token} on domain ${shopDomain}:`, apiError.message);
-                return { state: 'UNKNOWN', evidence: { reason: 'api_failure', error: apiError.message } };
+                return { state: 'VERIFICATION_UNAVAILABLE', evidence: { reason: 'api_failure', error: apiError.message } };
             }
 
         } catch (error) {
             console.error(`[ShopifyCommerceVerifier] Verification failed:`, error);
-            return { state: 'UNKNOWN', evidence: { error: error.message } };
+            return { state: 'VERIFICATION_UNAVAILABLE', evidence: { error: error.message } };
         }
     }
 

@@ -149,6 +149,17 @@ export class ToolExecutionService {
                 await this.recoveryEventPublisher.publishActionCompleted(caseId, recoveryType, provider, action, result, userId);
             }
 
+            if (action === 'commerce.discount.create' && typeof decision.parameters.discountPercent === 'number') {
+                const previous = recoveryContext?.recoveryCase?.previousDiscountPercent || 0;
+                const applied = decision.parameters.discountPercent;
+                const newMax = Math.max(previous, applied);
+                if (newMax > previous) {
+                    await this.recoveryCaseRepository.update(caseId, {
+                        previousDiscountPercent: newMax
+                    });
+                }
+            }
+
             return result;
         } catch (error) {
             console.error(`[ToolExecutionService] Error executing ${action}:`, error.message);

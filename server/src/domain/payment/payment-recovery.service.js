@@ -63,6 +63,43 @@ export class PaymentRecoveryService {
                 }
             }
 
+            if (process.env.SHOPIFY_HEURISTIC_CORRELATION_ENABLED === 'true' && provider === 'RAZORPAY' && recoveryTarget === 'COMMERCE_PURCHASE') {
+                const { ShopifyHeuristicCorrelationService } = await import('../recovery/shopify-heuristic-correlation.service.js');
+                const sinceTime = new Date(Date.now() - 15 * 60 * 1000);
+                const activeCases = await this.recoveryCaseRepository.findActiveShopifyAbandonmentCases(identity.storeId || connectionId, sinceTime);
+                
+                const heuristicResult = ShopifyHeuristicCorrelationService.evaluate(payment, rawBody, connectionId, activeCases);
+                if (heuristicResult.matched) {
+                    console.log(`[PaymentRecoveryService] Heuristically correlated payment ${payment.id} with checkout case ${heuristicResult.caseId} (Score: ${heuristicResult.score})`);
+                    
+                    const existingCase = activeCases.find(c => c.id === heuristicResult.caseId);
+                    const paymentSignal = {
+                        provider,
+                        status: 'failed',
+                        correlationMode: 'HEURISTIC',
+                        confidence: 'MEDIUM',
+                        failureClass: normalizedFailure,
+                        score: heuristicResult.score,
+                        reasons: heuristicResult.reasons
+                    };
+
+                    await this.recoveryCaseRepository.update(existingCase.id, {
+                        contextSnapshot: {
+                            ...existingCase.contextSnapshot,
+                            paymentSignal
+                        }
+                    });
+
+                    if (this.recoveryEventPublisher && payment.userId) {
+                        await this.recoveryEventPublisher.publishHeuristicPaymentSignalCorrelated(
+                            existingCase.id, existingCase.type, provider, payment.userId, payment.id, 'HEURISTIC', 'MEDIUM'
+                        );
+                    }
+
+                    return { status: 'associated_heuristically', recoveryCaseId: existingCase.id };
+                }
+            }
+
             let recoveryCase = await this.recoveryCaseRepository.findByEntity('PAYMENT_FAILURE', { paymentId: payment.id });
             if (!recoveryCase) {
                 const contextSnapshot = {
@@ -81,6 +118,8 @@ export class PaymentRecoveryService {
                     subjectId: payment.id,
                     paymentId: payment.id,
                     status: 'OPEN',
+                    revenueAtRisk: payment.amount ? BigInt(payment.amount) : null,
+                    userId: payment.userId,
                     contextSnapshot
                 });
 

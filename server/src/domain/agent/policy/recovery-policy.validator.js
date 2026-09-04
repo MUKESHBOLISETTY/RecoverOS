@@ -69,6 +69,8 @@ export class RecoveryPolicyValidator {
 
         if ((action === 'payment_link.create' || action === 'commerce.discount.create') && typeof parameters.discountPercent === 'number') {
             const maxDiscountPercent = policy.maxDiscountPercent || 0;
+            const previousDiscountPercent = recoveryCase?.previousDiscountPercent || 0;
+            
             if (parameters.discountPercent > maxDiscountPercent) {
                 return this._reject({
                     action,
@@ -76,6 +78,16 @@ export class RecoveryPolicyValidator {
                     currentCount: parameters.discountPercent,
                     maxAllowed: maxDiscountPercent,
                     reason: `Discount of ${parameters.discountPercent}% exceeds maximum allowed discount of ${maxDiscountPercent}%.`
+                });
+            }
+
+            if (parameters.discountPercent < previousDiscountPercent) {
+                return this._reject({
+                    action,
+                    limitType: 'DISCOUNT_LIMIT',
+                    currentCount: parameters.discountPercent,
+                    maxAllowed: maxDiscountPercent,
+                    reason: `Discount of ${parameters.discountPercent}% is lower than previously applied discount of ${previousDiscountPercent}%. Discounts cannot be decreased.`
                 });
             }
         }

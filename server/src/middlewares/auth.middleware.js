@@ -7,9 +7,8 @@ export const authenticateUser = async (req, res, next) => {
         if (!token) {
             return res.status(401).json({ success: false, message: "Access denied. No token provided." });
         }
-        
+
         const { user, sessionId } = await authService.verifySession(token);
-        
         req.user = user;
         req.sessionId = sessionId;
         next();

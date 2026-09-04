@@ -65,6 +65,11 @@ export class AgentNode {
             }
 
             systemPromptText += `- Max Discount %: ${policyContext.maxDiscountPercent}\n`;
+            
+            const previousDiscount = recoveryContext?.recoveryCase?.previousDiscountPercent || 0;
+            systemPromptText += `- Previous Discount %: ${previousDiscount}\n`;
+            systemPromptText += `- Constraint: You may choose any discount such that Previous Discount % <= Chosen Discount % <= Max Discount %\n`;
+
             if (policyContext.stopConditions && policyContext.stopConditions.length > 0) {
                 systemPromptText += `- Stop Conditions: ${policyContext.stopConditions.join(', ')}\n`;
             }

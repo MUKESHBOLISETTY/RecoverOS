@@ -83,7 +83,8 @@ export class PaymentContextProvider extends SubjectContextProviderInterface {
                 subjectId: recoveryCase.subjectId || 'UNKNOWN',
                 strategyApplied: recoveryCase.strategyApplied || null,
                 activeSkillId: recoveryCase.activeSkillId || null,
-                activeSkillVersion: recoveryCase.activeSkillVersion || null
+                activeSkillVersion: recoveryCase.activeSkillVersion || null,
+                previousDiscountPercent: recoveryCase.previousDiscountPercent ?? null
             },
             recoveryHistory,
             customerHistory: {},

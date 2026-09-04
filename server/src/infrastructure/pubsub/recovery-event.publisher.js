@@ -4,10 +4,12 @@ import crypto from 'crypto';
 export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
     /**
      * @param {import('./base-pubsub.service.js').BasePubSubService} pubsubService
+     * @param {import('@prisma/client').PrismaClient} prisma
      */
-    constructor(pubsubService) {
+    constructor(pubsubService, prisma) {
         super();
         this.pubsub = pubsubService;
+        this.prisma = prisma;
     }
 
     _generateEventId() {
@@ -25,7 +27,7 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
         const removeSensitiveKeys = (obj) => {
             if (typeof obj !== 'object' || obj === null) return;
 
-            const sensitiveKeys = ['accessToken', 'refreshToken', 'secret', 'password', 'cvv', 'cardNumber', 'hmac', 'token', 'key'];
+            const sensitiveKeys = ['accessToken', 'refreshToken', 'secret', 'password', 'cvv', 'cardNumber', 'hmac', 'token', 'key', 'email', 'phone'];
             for (const key in obj) {
                 if (sensitiveKeys.some(s => key.toLowerCase().includes(s))) {
                     delete obj[key];
@@ -45,6 +47,8 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
             return;
         }
 
+        const safeData = this._sanitizePayload(additionalData);
+
         const event = {
             eventId: this._generateEventId(),
             type,
@@ -53,8 +57,11 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
             provider,
             step,
             timestamp: new Date().toISOString(),
-            ...this._sanitizePayload(additionalData)
+            ...safeData
         };
+
+        // Fire and forget audit persistence
+        this._persistAudit(type, caseId, userId, safeData);
 
         const channel = this._getChannel(userId);
         try {
@@ -63,6 +70,23 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
             console.log(`[RecoveryEventPublisher] Publish succeeded for ${type} (clients: ${numClients})`);
         } catch (error) {
             console.error(`[RecoveryEventPublisher] Best-effort publish failed for ${type} (case: ${caseId}, channel: ${channel}):`, error.message);
+        }
+    }
+
+    async _persistAudit(type, caseId, userId, safeData) {
+        if (!this.prisma) return;
+        try {
+            await this.prisma.auditEvent.create({
+                data: {
+                    entityId: caseId,
+                    entityType: 'RecoveryCase',
+                    action: type,
+                    newValue: safeData || {},
+                    actor: userId
+                }
+            });
+        } catch (error) {
+            console.error(`[RecoveryEventPublisher] Audit persistence failed for ${type} (case: ${caseId}):`, error.message);
         }
     }
 
@@ -88,6 +112,30 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
         return this._publish('RECOVERY_AGENT_STARTED', caseId, recoveryType, provider, userId, 'AGENT_EXECUTION', { executionId });
     }
 
+    async publishAgentDecision(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('AGENT_DECISION', caseId, recoveryType, provider, userId, 'AGENT_EXECUTION', metadata);
+    }
+
+    async publishPolicyValidated(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('POLICY_VALIDATED', caseId, recoveryType, provider, userId, 'POLICY_EVALUATION', metadata);
+    }
+
+    async publishCommunicationSent(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('COMMUNICATION_SENT', caseId, recoveryType, provider, userId, 'COMMUNICATION', metadata);
+    }
+
+    async publishDiscountCreated(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('DISCOUNT_CREATED', caseId, recoveryType, provider, userId, 'INCENTIVE', metadata);
+    }
+
+    async publishPaymentLinkCreated(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('PAYMENT_LINK_CREATED', caseId, recoveryType, provider, userId, 'PAYMENT', metadata);
+    }
+
+    async publishFollowUpScheduled(caseId, recoveryType, provider, metadata, userId) {
+        return this._publish('FOLLOW_UP_SCHEDULED', caseId, recoveryType, provider, userId, 'SCHEDULING', metadata);
+    }
+
     async publishActionStarted(caseId, recoveryType, provider, action, userId) {
         return this._publish('RECOVERY_ACTION_STARTED', caseId, recoveryType, provider, userId, 'ACTION_EXECUTION', { action });
     }
@@ -110,5 +158,9 @@ export class RecoveryEventPublisher extends RecoveryEventPublisherInterface {
 
     async publishPaymentAttemptFailed(caseId, recoveryType, provider, userId, paymentId) {
         return this._publish('RECOVERY_PAYMENT_ATTEMPT_FAILED', caseId, recoveryType, provider, userId, 'PAYMENT_EVENT', { paymentId });
+    }
+
+    async publishHeuristicPaymentSignalCorrelated(caseId, recoveryType, provider, userId, paymentId, correlationMode, confidence) {
+        return this._publish('RECOVERY_PAYMENT_SIGNAL_CORRELATED', caseId, recoveryType, provider, userId, 'PAYMENT_SIGNAL', { paymentId, correlationMode, confidence });
     }
 }

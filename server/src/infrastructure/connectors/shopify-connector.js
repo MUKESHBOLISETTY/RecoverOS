@@ -33,39 +33,77 @@ class ShopifyConnector extends ConnectorInterface {
 
     const { shopDomain, accessToken } = credentials;
     const apiVersion = process.env.SHOPIFY_API_VERSION || '2026-07';
+    const url = `https://${shopDomain}/admin/api/${apiVersion}/graphql.json`;
 
-    let url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?checkout_token=${token}&status=any`;
-    let response = await fetch(url, {
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json'
+    // Attempt checkout_token first
+    let query = `
+      query {
+        orders(first: 1, query: "checkout_token:${token}") {
+          edges {
+            node {
+              id
+              fullyPaid
+              displayFinancialStatus
+              displayFulfillmentStatus
+            }
+          }
+        }
       }
-    });
+    `;
+
+    let order = await this._executeGraphQL(url, accessToken, query, 'checkout_token');
+    if (order) return { ...order, tokenType: 'checkout_token', checkoutToken: token };
+
+    // Fallback to cart_token
+    query = `
+      query {
+        orders(first: 1, query: "cart_token:${token}") {
+          edges {
+            node {
+              id
+              fullyPaid
+              displayFinancialStatus
+              displayFulfillmentStatus
+            }
+          }
+        }
+      }
+    `;
+
+    order = await this._executeGraphQL(url, accessToken, query, 'cart_token');
+    if (order) return { ...order, tokenType: 'cart_token', cartToken: token };
+
+    return null;
+  }
+
+  async _executeGraphQL(url, accessToken, query, type) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query })
+      });
+    } catch (err) {
+      throw new Error(`Shopify API network error (${type}): ${err.message}`);
+    }
 
     if (!response.ok) {
-      throw new Error(`Shopify API error (checkout_token): ${response.status} ${response.statusText}`);
+      throw new Error(`Shopify API error (${type}): HTTP ${response.status} ${response.statusText}`);
     }
 
-    let data = await response.json();
-    if (data.orders && data.orders.length > 0) {
-      return data.orders[0];
+    const data = await response.json();
+    
+    if (data.errors) {
+      throw new Error(`Shopify GraphQL error (${type}): ${JSON.stringify(data.errors)}`);
     }
 
-    url = `https://${shopDomain}/admin/api/${apiVersion}/orders.json?cart_token=${token}&status=any`;
-    response = await fetch(url, {
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Shopify API error (cart_token): ${response.status} ${response.statusText}`);
-    }
-
-    data = await response.json();
-    if (data.orders && data.orders.length > 0) {
-      return data.orders[0];
+    const edges = data.data?.orders?.edges;
+    if (edges && edges.length > 0) {
+      return edges[0].node;
     }
 
     return null;

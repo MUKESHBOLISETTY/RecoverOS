@@ -22,7 +22,8 @@ export const emailQueue = emailQueueService.getUnderlyingQueue();
 export const emailWorker = emailWorkerService.getUnderlyingWorker();
 
 import { RecoveryEventPublisher } from '../src/infrastructure/pubsub/recovery-event.publisher.js';
-export const recoveryEventPublisher = new RecoveryEventPublisher(pubsubService);
+
+export const recoveryEventPublisher = new RecoveryEventPublisher(pubsubService, prisma);
 
 import { WebhookEventQueue } from '../src/infrastructure/queue/webhook-event.queue.js';
 import { WebhookEventWorker } from '../src/infrastructure/queue/webhook-event.worker.js';
@@ -131,7 +132,7 @@ const shopifyAbandonmentService = new ShopifyAbandonmentService(
 
 export const shopifyAbandonmentWorkerService = new ShopifyAbandonmentWorker(shopifyAbandonmentService);
 
-const subjectContextRegistryFactory = async (credentials) => {
+export const subjectContextRegistryFactory = async (credentials) => {
     const { SubjectContextRegistry } = await import('../src/domain/recovery/context-providers/subject-context.registry.js');
     const { PaymentContextProvider } = await import('../src/domain/recovery/context-providers/payment-context.provider.js');
     const { CheckoutContextProvider } = await import('../src/domain/recovery/context-providers/checkout-context.provider.js');
@@ -192,7 +193,9 @@ export const recoveryScheduleWorkerService = new RecoveryScheduleWorker(
     recoveryCaseService,
     agentExecutionQueueService,
     recoveryVerificationService,
-    RecoveryPolicyValidator
+    RecoveryPolicyValidator,
+    triggerContextResolver,
+    agentRepository
 );
 
 import { PaymentStabilizationWorker } from '../src/infrastructure/queue/payment-stabilization.worker.js';

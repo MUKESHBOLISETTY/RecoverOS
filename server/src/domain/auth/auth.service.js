@@ -10,12 +10,14 @@ export class AuthService {
     /**
      * @param {UserRepository} userRepository
      * @param {DeviceSessionRepository} deviceSessionRepository
+     * @param {import('../agent/agent-provisioning.service.js').AgentProvisioningService} agentProvisioningService
      */
-    constructor(userRepository, deviceSessionRepository) {
+    constructor(userRepository, deviceSessionRepository, agentProvisioningService) {
         if (!userRepository) throw new Error('AuthService: userRepository is required');
         if (!deviceSessionRepository) throw new Error('AuthService: deviceSessionRepository is required');
         this.userRepository = userRepository;
         this.deviceSessionRepository = deviceSessionRepository;
+        this.agentProvisioningService = agentProvisioningService;
         this.jwtSecret = process.env.JWT_SECRET;
         this.sessionPrefix = 'session:';
     }
@@ -34,6 +36,10 @@ export class AuthService {
             password: hashedPassword,
             emailVerified: true
         });
+
+        if (this.agentProvisioningService) {
+            await this.agentProvisioningService.provisionDefaultAgent(user.id);
+        }
 
         return this._createSession(user, deviceName, ipAddress);
     }

@@ -46,6 +46,31 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
     }
 
     /**
+     * @param {string} storeDomainOrConnectionId
+     * @param {Date} sinceTime
+     * @returns {Promise<Array<Object>>}
+     */
+    async findActiveShopifyAbandonmentCases(storeDomainOrConnectionId, sinceTime) {
+        // Query cases since the time window that are active
+        const cases = await this.prisma.recoveryCase.findMany({
+            where: {
+                type: 'CART_ABANDONMENT',
+                subjectType: 'CHECKOUT',
+                status: { in: ['OPEN', 'ANALYZING', 'WAITING', 'ACTION_REQUIRED', 'ESCALATED'] },
+                createdAt: { gte: sinceTime }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        // Filter in memory for storeDomain or connectionId safety because 
+        // connectionId could be the store identifier in some contexts.
+        return cases.filter(c => {
+            const domain = c.contextSnapshot?.shopDomain;
+            return domain === storeDomainOrConnectionId;
+        });
+    }
+
+    /**
      * @param {string} id
      * @returns {Promise<Object|null>}
      */
@@ -68,6 +93,33 @@ export class PrismaRecoveryCaseRepository extends RecoveryCaseRepository {
      */
     async update(id, data) {
         return this.prisma.recoveryCase.update({ where: { id }, data });
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} skillId
+     * @param {number} skillVersion
+     * @returns {Promise<{ updated: boolean, caseRecord: Object }>}
+     */
+    async updateSkillIfNull(caseId, skillId, skillVersion) {
+        return await this.prisma.$transaction(async (tx) => {
+            const caseRecord = await tx.recoveryCase.findUnique({ where: { id: caseId } });
+            if (!caseRecord) {
+                throw new Error(`RecoveryCase ${caseId} not found`);
+            }
+            if (caseRecord.activeSkillId) {
+                // Already populated by another worker
+                return { updated: false, caseRecord };
+            }
+            const updated = await tx.recoveryCase.update({
+                where: { id: caseId },
+                data: {
+                    activeSkillId: skillId,
+                    activeSkillVersion: skillVersion
+                }
+            });
+            return { updated: true, caseRecord: updated };
+        });
     }
 
     async escalateCase(caseId, executionId, reason) {

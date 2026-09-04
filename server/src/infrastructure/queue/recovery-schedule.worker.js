@@ -10,6 +10,8 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
      * @param {import('./agent-execution.queue.js').AgentExecutionQueue} agentExecutionQueue
      * @param {import('../../domain/recovery/verification/recovery-verification.service.js').RecoveryVerificationService} recoveryVerificationService
      * @param {import('../../domain/agent/policy/recovery-policy.validator.js').RecoveryPolicyValidator} recoveryPolicyValidator
+     * @param {import('../../domain/agent/execution/trigger-context.resolver.js').TriggerContextResolver} triggerContextResolver
+     * @param {import('../db/agent/prisma-agent.repository.js').PrismaAgentRepository} agentRepository
      */
     constructor(
         recoveryScheduleRepository,
@@ -18,7 +20,9 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
         recoveryCaseService,
         agentExecutionQueue,
         recoveryVerificationService,
-        recoveryPolicyValidator
+        recoveryPolicyValidator,
+        triggerContextResolver,
+        agentRepository
     ) {
         super('recovery-schedule');
         this.recoveryScheduleRepository = recoveryScheduleRepository;
@@ -28,6 +32,8 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
         this.agentExecutionQueue = agentExecutionQueue;
         this.recoveryVerificationService = recoveryVerificationService;
         this.recoveryPolicyValidator = recoveryPolicyValidator;
+        this.triggerContextResolver = triggerContextResolver;
+        this.agentRepository = agentRepository;
     }
 
     /**
@@ -69,6 +75,36 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             return;
         }
 
+        if (!recoveryCase.activeSkillId) {
+            console.log(`[RecoveryScheduleWorker] Case ${recoveryCase.id} missing activeSkillId. Attempting backfill.`);
+            try {
+                const agentConfig = await this.agentRepository.findById(origExecution.agentId);
+                if (agentConfig) {
+                    const mockExecution = {
+                        triggerType: 'recovery.schedule',
+                        inputContext: { recoveryCaseId: recoveryCase.id }
+                    };
+                    const resolvedContext = await this.triggerContextResolver.resolveContext(
+                        mockExecution,
+                        agentConfig
+                    );
+                    if (resolvedContext && resolvedContext.recoveryCase && resolvedContext.recoveryCase.activeSkillId) {
+                        recoveryCase.activeSkillId = resolvedContext.recoveryCase.activeSkillId;
+                        recoveryCase.activeSkillVersion = resolvedContext.recoveryCase.activeSkillVersion;
+                        console.log(`[RecoveryScheduleWorker] Successfully backfilled activeSkillId ${recoveryCase.activeSkillId} for Case ${recoveryCase.id}.`);
+                    }
+                }
+            } catch (err) {
+                console.error(`[RecoveryScheduleWorker] Error attempting backfill for Case ${recoveryCase.id}:`, err);
+            }
+
+            if (!recoveryCase.activeSkillId) {
+                console.error(`[RecoveryScheduleWorker] Case ${recoveryCase.id} still missing activeSkillId after backfill attempt. State error. Aborting.`);
+                await this.recoveryScheduleRepository.markFailed(scheduleId);
+                return;
+            }
+        }
+
         const verificationResult = await this.recoveryVerificationService.verify(recoveryCase, { userId: origExecution.userId });
         console.log(`[RecoveryScheduleWorker] Fresh verification for schedule ${scheduleId}: ${verificationResult.state}`);
 
@@ -79,6 +115,11 @@ export class RecoveryScheduleWorker extends BaseWorkerService {
             console.log(`[RecoveryScheduleWorker] Case ${recoveryCase.id} is ${verificationResult.state}. Cancelling schedule.`);
             await this.recoveryScheduleRepository.cancel(scheduleId);
             return;
+        }
+
+        if (verificationResult.state === 'VERIFICATION_UNAVAILABLE') {
+            console.log(`[RecoveryScheduleWorker] Case ${recoveryCase.id} verification unavailable. Failing job to trigger retry.`);
+            throw new Error(`Verification unavailable: ${verificationResult.evidence?.reason || verificationResult.evidence?.error || 'Unknown error'}`);
         }
 
         if (verificationResult.state === 'UNKNOWN' && safeActions.length === 0) {

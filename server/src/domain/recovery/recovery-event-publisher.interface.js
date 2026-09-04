@@ -67,6 +67,72 @@ export class RecoveryEventPublisherInterface {
      * @param {string} caseId
      * @param {string} recoveryType
      * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishAgentDecision(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishPolicyValidated(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishCommunicationSent(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishDiscountCreated(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishPaymentLinkCreated(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {Object} metadata
+     * @param {string} userId
+     */
+    async publishFollowUpScheduled(caseId, recoveryType, provider, metadata, userId) {
+        throw new Error('Not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
      * @param {string} action
      * @param {Object} result
      * @param {string} userId
@@ -115,6 +181,20 @@ export class RecoveryEventPublisherInterface {
      * @param {string} paymentId
      */
     async publishPaymentAttemptFailed(caseId, recoveryType, provider, userId, paymentId) {
-        throw new Error('Not implemented');
+        throw new Error('Method not implemented');
+    }
+
+    /**
+     * @param {string} caseId
+     * @param {string} recoveryType
+     * @param {string} provider
+     * @param {string} userId
+     * @param {string} paymentId
+     * @param {string} correlationMode
+     * @param {string} confidence
+     * @returns {Promise<void>}
+     */
+    async publishHeuristicPaymentSignalCorrelated(caseId, recoveryType, provider, userId, paymentId, correlationMode, confidence) {
+        throw new Error('Method not implemented');
     }
 }

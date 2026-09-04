@@ -57,6 +57,11 @@ export class PaymentStabilizationWorker extends BaseWorkerService {
 
         const triggeredAgents = await this.agentTriggerService.evaluateTriggers(payment.userId, 'payment.failed', { payload: { payment: { entity: payment } } });
 
+        if (verificationResult.state === 'VERIFICATION_UNAVAILABLE') {
+            console.log(`[PaymentStabilizationWorker] Case ${recoveryCaseId} verification unavailable. Failing job to trigger retry.`);
+            throw new Error(`Verification unavailable: ${verificationResult.evidence?.reason || verificationResult.evidence?.error || 'Unknown error'}`);
+        }
+
         for (const agent of triggeredAgents) {
             const policyResult = this.policyValidator.getAllowedActionsFromVerification(verificationResult);
             const safeActions = policyResult.allowedActions || [];

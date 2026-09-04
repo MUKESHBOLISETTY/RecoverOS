@@ -105,7 +105,6 @@ export class MemorySkillRegistry extends SkillRegistryInterface {
                 'If the case is RECOVERED, make no customer communication attempt.',
                 'The agent MAY consider offering a discount when it is appropriate to improve conversion. Consider engagement, cart value, and history.',
                 'If a discount is requested, propose an appropriate percentage. The maximum discount limit is enforced by the system, so if the discount tool rejects the request, adapt the response appropriately without retrying with an unauthorized percentage or fabricating a code.',
-                'Do not provide discount during the first try.',
                 'When the discount tool succeeds, it returns a discount code. Use that exact discount code in your subsequent communication tool call.',
                 'Never fabricate a discount code, and never generate Razorpay payment links.',
                 'Escalate to human review only if customer context indicates it is strictly necessary.'

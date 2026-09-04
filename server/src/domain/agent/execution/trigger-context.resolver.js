@@ -65,8 +65,9 @@ export class TriggerContextResolver {
                 if (!caseRecord) {
                     throw new Error(`[TriggerContextResolver] Provided recoveryCaseId ${recoveryCaseId} not found.`);
                 }
-
+                
                 recoveryCase = caseRecord;
+
             } else {
                 const skillId = this.skillSelector.selectForTrigger({ eventType: triggerType, agentData: agentConfig });
                 let activeSkillId = null;
@@ -94,6 +95,26 @@ export class TriggerContextResolver {
                 });
             }
         } else {
+            throw new Error(`[TriggerContextResolver] Unsupported triggerType: ${triggerType}`);
+        }
+
+        if (recoveryCase && !recoveryCase.activeSkillId) {
+            let originalEventType = triggerType;
+            if (triggerType === 'recovery.schedule' || triggerType === 'manual.retry') {
+                if (recoveryCase.type === 'CART_ABANDONMENT') originalEventType = 'checkout.abandoned';
+                else if (recoveryCase.type === 'PAYMENT_FAILURE') originalEventType = 'payment.failed';
+            }
+            const skillId = this.skillSelector.selectForTrigger({ eventType: originalEventType, agentData: agentConfig });
+            if (skillId) {
+                const skill = await this.skillRegistry.getSkill(skillId);
+                if (skill) {
+                    const result = await this.recoveryCaseService.updateSkillIfNull(recoveryCase.id, skill.id, skill.version);
+                    recoveryCase = result.caseRecord;
+                }
+            }
+        }
+
+        if (!recoveryCase) {
             throw new Error(`[TriggerContextResolver] Unsupported triggerType: ${triggerType}`);
         }
 

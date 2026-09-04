@@ -71,7 +71,8 @@ export class CheckoutContextProvider extends SubjectContextProviderInterface {
                 contextSnapshot: recoveryCase.contextSnapshot || {},
                 strategyApplied: recoveryCase.strategyApplied || null,
                 activeSkillId: recoveryCase.activeSkillId || null,
-                activeSkillVersion: recoveryCase.activeSkillVersion || null
+                activeSkillVersion: recoveryCase.activeSkillVersion || null,
+                previousDiscountPercent: recoveryCase.previousDiscountPercent ?? null
             },
             recoveryHistory,
             customerHistory: {},

@@ -39,6 +39,7 @@ export class AgentExecutionService {
                 externalTriggerId: input.externalTriggerId || null,
                 provider: input.provider || null,
                 inputContext: input.inputContext || null,
+                recoveryCaseId: input.recoveryCaseId || (input.inputContext && input.inputContext.recoveryCaseId) || null,
                 status: 'QUEUED'
             };
 

@@ -144,6 +144,25 @@ export class RecoveryCaseService {
     isEligibleForScheduledExecution(caseStatus) {
         return SCHEDULE_ELIGIBLE_STATUSES.has(caseStatus);
     }
+
+    /**
+     * @param {string} caseId
+     * @param {string} skillId
+     * @param {number} skillVersion
+     * @returns {Promise<{ updated: boolean, caseRecord: Object }>}
+     */
+    async updateSkillIfNull(caseId, skillId, skillVersion) {
+        if (!this.recoveryCaseRepository.updateSkillIfNull) {
+            // Fallback if not supported by repository mock during tests
+            const caseRecord = await this.recoveryCaseRepository.findById(caseId);
+            if (caseRecord && !caseRecord.activeSkillId) {
+                const updated = await this.recoveryCaseRepository.update(caseId, { activeSkillId: skillId, activeSkillVersion: skillVersion });
+                return { updated: true, caseRecord: updated };
+            }
+            return { updated: false, caseRecord };
+        }
+        return this.recoveryCaseRepository.updateSkillIfNull(caseId, skillId, skillVersion);
+    }
 }
 
 export default RecoveryCaseService;

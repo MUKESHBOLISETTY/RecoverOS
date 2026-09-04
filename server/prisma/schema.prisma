@@ -194,6 +194,9 @@ enum RecoveryCaseType {
 model RecoveryCase {
   id        String  @id @default(uuid()) @db.Uuid
   
+  userId    String? @db.Uuid
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   type      RecoveryCaseType @default(PAYMENT_FAILURE)
 
   subjectType String?
@@ -212,6 +215,9 @@ model RecoveryCase {
   correlation   PaymentFailureCorrelation? @relation(fields: [correlationId], references: [id], onDelete: SetNull)
 
   status RecoveryCaseStatus @default(OPEN)
+
+  revenueAtRisk BigInt?
+  previousDiscountPercent Int @default(0)
 
   // Snapshots for context
   contextSnapshot Json?
@@ -288,6 +294,7 @@ model User {
   agents               Agent[]
   payments             Payment[]
   paymentDowntimes     PaymentDowntime[]
+  recoveryCases        RecoveryCase[]
 
   @@index([email])
 }

@@ -123,11 +123,19 @@ class ConnectorsController {
       }
 
       const result = await this.googleOAuthService.handleCallback(state, code);
-      // Ensure gmail is attached
-      if (result.success && !result.requiresResourceSelection && this.agentRepository && result.connection) {
-        await this.agentRepository.attachCredentialToActiveAgents(result.userId, result.connection.id);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+      if (result.success) {
+        if (!result.requiresResourceSelection && this.agentRepository && result.connection) {
+          await this.agentRepository.attachCredentialToActiveAgents(result.userId, result.connection.id);
+        }
+        if (result.requiresResourceSelection) {
+          return res.redirect(`${frontendUrl}/onboarding?google=sheets&tempAuthId=${result.tempAuthId}`);
+        }
+        return res.redirect(`${frontendUrl}/onboarding?google=success`);
+      } else {
+        return res.redirect(`${frontendUrl}/onboarding?google=error`);
       }
-      res.json({ success: true, ...result });
     } catch (error) {
       console.error('Error handling Google callback:', error);
       res.status(500).json({ success: false, error: error.message });
@@ -187,15 +195,16 @@ class ConnectorsController {
   };
 
   handleShopifyCallback = async (req, res) => {
+    const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:5173';
     try {
       const { state, code, shop } = req.query;
 
       if (!state || !code || !shop) {
-        return res.status(400).json({ success: false, error: 'Missing state, code, or shop' });
+        return res.redirect(`${frontendUrl}/onboarding?shopify=error`);
       }
 
       if (typeof state !== 'string' || typeof code !== 'string' || typeof shop !== 'string') {
-        return res.status(400).json({ success: false, error: 'Invalid query parameters: must be strings' });
+        return res.redirect(`${frontendUrl}/onboarding?shopify=error`);
       }
 
       const result = await this.shopifyOAuthService.handleCallback(state, code, shop);
@@ -204,11 +213,14 @@ class ConnectorsController {
         await this.agentRepository.attachCredentialToActiveAgents(result.userId, result.connection.id);
       }
 
-      const { isReconnect, userId, ...publicResult } = result;
-      res.json(publicResult);
+      if (result.success) {
+        return res.redirect(`${frontendUrl}/onboarding?shopify=success`);
+      } else {
+        return res.redirect(`${frontendUrl}/onboarding?shopify=error`);
+      }
     } catch (error) {
       console.error('Error handling Shopify callback:', error);
-      res.status(500).json({ success: false, error: error.message });
+      return res.redirect(`${frontendUrl}/onboarding?shopify=error`);
     }
   };
 }

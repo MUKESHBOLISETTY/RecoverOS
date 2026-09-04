@@ -93,6 +93,8 @@ export class ShopifyAbandonmentService {
                 checkoutUrl: payload.abandoned_checkout_url,
                 customer: {
                     firstName: payload.customer?.first_name || null,
+                    email: email || null,
+                    phone: phone || null,
                     emailAvailable: !!email,
                     phoneAvailable: !!phone
                 },
@@ -103,11 +105,29 @@ export class ShopifyAbandonmentService {
                 updatedAt: payload.updated_at
             };
 
+            // Shopify total_price is usually a string like "2499.00". Convert to minor units.
+            let revenueAtRisk = null;
+            if (payload.total_price) {
+                const parsed = parseFloat(payload.total_price);
+                if (!isNaN(parsed)) {
+                    revenueAtRisk = BigInt(Math.round(parsed * 100));
+                }
+            }
+
+            const connectionName = `Shopify (${shopDomain})`;
+            const credential = await this.credentialRepo.findByConnectorAndName('shopify', connectionName);
+            let userId = null;
+            if (credential) {
+                userId = credential.userId;
+            }
+
             const recoveryCase = await this.recoveryCaseRepository.create({
                 type: 'CART_ABANDONMENT',
                 subjectType: 'CHECKOUT',
                 subjectId: checkoutToken,
                 status: 'OPEN',
+                revenueAtRisk,
+                userId,
                 contextSnapshot
             });
 
@@ -117,12 +137,7 @@ export class ShopifyAbandonmentService {
 
             // Trigger AgentExecution
             try {
-                const connectionName = `Shopify (${shopDomain})`;
-                const credential = await this.credentialRepo.findByConnectorAndName('shopify', connectionName);
-
                 if (credential) {
-                    const userId = credential.userId;
-
                     if (this.recoveryEventPublisher) {
                         await this.recoveryEventPublisher.publishCaseCreated(recoveryCase.id, 'CART_ABANDONMENT', 'shopify', userId);
                     }

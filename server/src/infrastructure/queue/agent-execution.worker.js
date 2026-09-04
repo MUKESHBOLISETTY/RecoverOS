@@ -163,6 +163,47 @@ export class AgentExecutionWorker extends BaseWorkerService {
             });
 
             console.log(`[AgentExecutionWorker] Execution ${executionId} SUCCEEDED.`);
+            
+            // Publish AGENT_DECISION audit event if a decision was made
+            if (agentResponse?.decision && global.recoveryEventPublisher && execution.recoveryCaseId && execution.userId) {
+                const metadata = {
+                    executionId: execution.id,
+                    action: agentResponse.decision.action,
+                    rationale: agentResponse.decision.rationale,
+                    parameters: agentResponse.decision.parameters,
+                    finalStatus: agentResponse.decision.finalStatus
+                };
+                
+                try {
+                    const { prisma } = await import('../../../config/database.config.js');
+                    const existingEvent = await prisma.auditEvent.findFirst({
+                        where: {
+                            entityId: execution.recoveryCaseId,
+                            entityType: 'RecoveryCase',
+                            action: 'AGENT_DECISION',
+                            newValue: {
+                                path: ['executionId'],
+                                equals: execution.id
+                            }
+                        }
+                    });
+
+                    if (!existingEvent) {
+                        await global.recoveryEventPublisher.publishAgentDecision(
+                            execution.recoveryCaseId,
+                            execution.triggerType === 'checkout.abandoned' ? 'CART_ABANDONMENT' : 'PAYMENT_FAILURE',
+                            execution.triggerType === 'checkout.abandoned' ? 'shopify' : 'razorpay',
+                            metadata,
+                            execution.userId
+                        );
+                        console.log(`[AgentExecutionWorker] Published AGENT_DECISION for execution ${executionId}.`);
+                    } else {
+                        console.log(`[AgentExecutionWorker] AGENT_DECISION for execution ${executionId} already exists. Skipping publish.`);
+                    }
+                } catch (pubErr) {
+                    console.error(`[AgentExecutionWorker] Failed to publish AGENT_DECISION for execution ${executionId}:`, pubErr);
+                }
+            }
 
         } catch (error) {
             console.error(`[AgentExecutionWorker] Execution ${executionId} FAILED:`, error);
